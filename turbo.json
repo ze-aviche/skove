@@ -1,0 +1,16 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["NODE_ENV", "DATABASE_URL", "CLERK_SECRET_KEY"],
+  "pipeline": {
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "dist/**"]
+    },
+    "lint": {},
+    "typecheck": {}
+  }
+}

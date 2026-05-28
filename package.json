@@ -1,0 +1,29 @@
+{
+  "name": "skove",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agents working for you, 24/7",
+  "packageManager": "pnpm@8.15.0",
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:migrate": "pnpm --filter api db:migrate",
+    "db:studio": "pnpm --filter api db:studio"
+  },
+  "devDependencies": {
+    "turbo": "^1.13.0",
+    "typescript": "^5.3.3",
+    "@types/node": "^20.11.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "agents/*"
+  ]
+}
