@@ -15,6 +15,7 @@ resultsRouter.get('/', requireAuth, async (req, res) => {
       .limit(100)
     res.json(results)
   } catch (err) {
+    console.error('GET /api/results error:', err)
     res.status(500).json({ error: 'Failed to fetch results' })
   }
 })
@@ -22,12 +23,18 @@ resultsRouter.get('/', requireAuth, async (req, res) => {
 // PATCH /api/results/:id/read — mark result as read
 resultsRouter.patch('/:id/read', requireAuth, async (req, res) => {
   try {
+    const result = await db.select().from(agentResults).where(eq(agentResults.id, req.params.id))
+    if (!result[0] || result[0].userId !== req.userId) {
+      return res.status(404).json({ error: 'Result not found' })
+    }
+
     const [updated] = await db.update(agentResults)
       .set({ isRead: true })
       .where(eq(agentResults.id, req.params.id))
       .returning()
     res.json(updated)
   } catch (err) {
+    console.error('PATCH /api/results/:id/read error:', err)
     res.status(500).json({ error: 'Failed to mark result as read' })
   }
 })

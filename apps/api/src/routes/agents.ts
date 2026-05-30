@@ -1,9 +1,11 @@
 import { Router } from 'express'
+import { clerkClient } from '@clerk/clerk-sdk-node'
 import { db } from '../db'
-import { agentInstances, agentDefinitions } from '../db/schema'
+import { agentInstances, agentDefinitions, users, agentResults } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { requireAuth } from '../lib/auth'
 import { z } from 'zod'
+import { scheduleInstance, unscheduleInstance, runInstance } from '../runner/scheduler'
 
 export const agentsRouter = Router()
 
@@ -15,7 +17,18 @@ agentsRouter.get('/definitions', async (_, res) => {
     )
     res.json(agents)
   } catch (err) {
+    console.error('GET /api/agents/definitions error:', err)
     res.status(500).json({ error: 'Failed to fetch agents' })
+  }
+})
+
+// Debug: return the authenticated user id
+agentsRouter.get('/whoami', requireAuth, async (req, res) => {
+  try {
+    res.json({ userId: req.userId })
+  } catch (err) {
+    console.error('GET /api/agents/whoami error:', err)
+    res.status(500).json({ error: 'Failed to resolve user' })
   }
 })
 
@@ -27,6 +40,7 @@ agentsRouter.get('/my', requireAuth, async (req, res) => {
     )
     res.json(instances)
   } catch (err) {
+    console.error('GET /api/agents/my error:', err)
     res.status(500).json({ error: 'Failed to fetch agent instances' })
   }
 })
@@ -42,14 +56,32 @@ agentsRouter.post('/deploy', requireAuth, async (req, res) => {
   if (!body.success) return res.status(400).json({ error: body.error })
 
   try {
+    // Ensure user row exists with a real email address
+    const existingUser = await db.select().from(users).where(eq(users.id, req.userId!))
+    if (!existingUser[0]) {
+      let email = req.userId! // fallback
+      try {
+        const clerkUser = await clerkClient.users.getUser(req.userId!)
+        email = clerkUser.emailAddresses[0]?.emailAddress ?? req.userId!
+      } catch { /* non-fatal — proceed with fallback */ }
+      await db.insert(users).values({ id: req.userId!, email })
+    }
     const [instance] = await db.insert(agentInstances).values({
       userId: req.userId!,
       agentId: body.data.agentId,
       config: body.data.config,
       isActive: true,
     }).returning()
+
+    // Look up the agent's schedule and schedule it immediately
+    const [definition] = await db.select().from(agentDefinitions).where(eq(agentDefinitions.id, body.data.agentId))
+    if (definition) {
+      scheduleInstance(instance.id, definition.schedule)
+    }
+
     res.json(instance)
   } catch (err) {
+    console.error('POST /api/agents/deploy error:', err)
     res.status(500).json({ error: 'Failed to deploy agent' })
   }
 })
@@ -63,12 +95,86 @@ agentsRouter.patch('/:id/toggle', requireAuth, async (req, res) => {
     if (!instance[0] || instance[0].userId !== req.userId) {
       return res.status(404).json({ error: 'Agent not found' })
     }
+    const nowActive = !instance[0].isActive
     const [updated] = await db.update(agentInstances)
-      .set({ isActive: !instance[0].isActive })
+      .set({ isActive: nowActive })
+      .where(eq(agentInstances.id, req.params.id))
+      .returning()
+
+    if (nowActive) {
+      const [definition] = await db.select().from(agentDefinitions).where(eq(agentDefinitions.id, instance[0].agentId))
+      if (definition) scheduleInstance(updated.id, definition.schedule)
+    } else {
+      unscheduleInstance(updated.id)
+    }
+
+    res.json(updated)
+  } catch (err) {
+    console.error('PATCH /api/agents/:id/toggle error:', err)
+    res.status(500).json({ error: 'Failed to toggle agent' })
+  }
+})
+
+const updateConfigSchema = z.object({
+  config: z.record(z.unknown()),
+})
+
+// PATCH /api/agents/:id/config — update an agent's configuration
+agentsRouter.patch('/:id/config', requireAuth, async (req, res) => {
+  const body = updateConfigSchema.safeParse(req.body)
+  if (!body.success) return res.status(400).json({ error: body.error })
+
+  try {
+    const instance = await db.select().from(agentInstances).where(
+      eq(agentInstances.id, req.params.id)
+    )
+    if (!instance[0] || instance[0].userId !== req.userId) {
+      return res.status(404).json({ error: 'Agent not found' })
+    }
+
+    const [updated] = await db.update(agentInstances)
+      .set({ config: body.data.config })
       .where(eq(agentInstances.id, req.params.id))
       .returning()
     res.json(updated)
   } catch (err) {
-    res.status(500).json({ error: 'Failed to toggle agent' })
+    console.error('PATCH /api/agents/:id/config error:', err)
+    res.status(500).json({ error: 'Failed to update agent config' })
+  }
+})
+
+// POST /api/agents/:id/run — manually trigger an agent run immediately
+agentsRouter.post('/:id/run', requireAuth, async (req, res) => {
+  try {
+    const [instance] = await db.select().from(agentInstances).where(eq(agentInstances.id, req.params.id))
+    if (!instance || instance.userId !== req.userId) {
+      return res.status(404).json({ error: 'Agent not found' })
+    }
+    const results = await runInstance(req.params.id)
+    res.json({ ran: true, results })
+  } catch (err) {
+    console.error('POST /api/agents/:id/run error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Run failed' })
+  }
+})
+
+// DELETE /api/agents/:id — undeploy and remove a user agent instance
+agentsRouter.delete('/:id', requireAuth, async (req, res) => {
+  try {
+    const instance = await db.select().from(agentInstances).where(
+      eq(agentInstances.id, req.params.id)
+    )
+    if (!instance[0] || instance[0].userId !== req.userId) {
+      return res.status(404).json({ error: 'Agent not found' })
+    }
+
+    unscheduleInstance(req.params.id)
+    await db.delete(agentResults).where(eq(agentResults.instanceId, req.params.id))
+    await db.delete(agentInstances).where(eq(agentInstances.id, req.params.id))
+
+    res.json({ id: req.params.id })
+  } catch (err) {
+    console.error('DELETE /api/agents/:id error:', err)
+    res.status(500).json({ error: 'Failed to delete agent' })
   }
 })

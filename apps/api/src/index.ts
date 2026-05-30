@@ -1,14 +1,16 @@
-import 'dotenv/config'
+import { config } from 'dotenv'
+config({ path: '.env.local' })
 import express from 'express'
 import cors from 'cors'
 import { agentsRouter } from './routes/agents'
 import { resultsRouter } from './routes/results'
 import { webhooksRouter } from './routes/webhooks'
+import { startScheduler } from './runner/scheduler'
 
 const app = express()
 const PORT = process.env.API_PORT || 3001
 
-app.use(cors({ origin: process.env.NEXT_PUBLIC_APP_URL }))
+app.use(cors({ origin: process.env.NEXT_PUBLIC_APP_URL, credentials: true }))
 app.use(express.json())
 
 // Health check
@@ -21,4 +23,5 @@ app.use('/api/webhooks', webhooksRouter)
 
 app.listen(PORT, () => {
   console.log(`Skove API running on http://localhost:${PORT}`)
+  startScheduler().catch((err) => console.error('[scheduler] Failed to start:', err))
 })

@@ -7,18 +7,30 @@ module.exports = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['var(--font-geist)', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-geist-mono)', 'monospace'],
+      },
       colors: {
         brand: {
-          50:  '#f0f4ff',
-          100: '#e0e9ff',
-          500: '#4f6ef7',
-          600: '#3b5bf5',
-          700: '#2947e8',
-          900: '#1a2fa0',
+          50:  '#f5f3ff',
+          100: '#ede9fe',
+          200: '#ddd6fe',
+          400: '#a78bfa',
+          500: '#8b5cf6',
+          600: '#7c3aed',
+          700: '#6d28d9',
+          900: '#4c1d95',
         },
       },
-      fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+      animation: {
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'fade-in': 'fadeIn 0.4s ease forwards',
+        'slide-up': 'slideUp 0.3s ease forwards',
+      },
+      keyframes: {
+        fadeIn: { from: { opacity: 0 }, to: { opacity: 1 } },
+        slideUp: { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'translateY(0)' } },
       },
     },
   },

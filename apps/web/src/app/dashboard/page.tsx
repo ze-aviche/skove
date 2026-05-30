@@ -1,72 +1,259 @@
-import { auth } from '@clerk/nextjs'
-import { redirect } from 'next/navigation'
+ 'use client'
 
-export default async function DashboardPage() {
-  const { userId } = auth()
-  if (!userId) redirect('/sign-in')
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { useAuth } from '@clerk/nextjs'
+import { getAgentDefinitions, getMyAgents, getResults, AgentDefinition, AgentInstance, AgentResult } from '@/lib/api'
+
+const iconMap: Record<string, string> = {
+  'flight-watcher': '✈️',
+  'job-application-tracker': '💼',
+  'rental-listing-monitor': '🏠',
+  'stock-price-alert': '📈',
+  'keyword-news-monitor': '📰',
+}
+
+export default function DashboardPage() {
+  const [agents, setAgents] = useState<AgentInstance[]>([])
+  const [definitions, setDefinitions] = useState<Record<string, AgentDefinition>>({})
+  const [results, setResults] = useState<AgentResult[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const auth = useAuth()
+  useEffect(() => {
+    async function loadDashboard() {
+      try {
+        const token = await auth.getToken()
+        const [instances, defs, recentResults] = await Promise.all([
+          getMyAgents(token),
+          getAgentDefinitions(token),
+          getResults(token),
+        ])
+        setAgents(instances)
+        setDefinitions(Object.fromEntries(defs.map((def) => [def.id, def])))
+        setResults(recentResults)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard data')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadDashboard()
+  }, [])
+
+  useEffect(() => {
+    const handleAgentsChanged = async () => {
+      setLoading(true)
+      try {
+        const token = await auth.getToken()
+        const [instances, defs, recentResults] = await Promise.all([
+          getMyAgents(token),
+          getAgentDefinitions(token),
+          getResults(token),
+        ])
+        setAgents(instances)
+        setDefinitions(Object.fromEntries(defs.map((def) => [def.id, def])))
+        setResults(recentResults)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard data')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    window.addEventListener('agents:changed', handleAgentsChanged)
+    return () => window.removeEventListener('agents:changed', handleAgentsChanged)
+  }, [auth])
+
+  const activeAgents = agents.filter((agent) => agent.isActive).length
+  const totalAgents = agents.length
+  const unreadResults = results.filter((result) => !result.isRead).length
+  const stats = useMemo(() => [
+    { label: 'Active agents', value: String(activeAgents), delta: `${totalAgents} deployed`, color: 'var(--brand)' },
+    { label: 'New results', value: String(results.length), delta: `${unreadResults} unread`, color: 'var(--green)' },
+    { label: 'Alerts sent', value: '—', delta: 'Use a result rule', color: 'var(--amber)' },
+    { label: 'Hours saved', value: `${Math.floor(results.length * 0.5)}h`, delta: 'Estimated', color: 'var(--blue)' },
+  ], [activeAgents, results.length, totalAgents, unreadResults])
+
+  const runningAgents = useMemo(() => agents.map((agent) => {
+    const def = definitions[agent.agentId]
+    return {
+      id: agent.id,
+      icon: iconMap[agent.agentId] ?? '🤖',
+      name: def?.name ?? agent.agentId,
+      desc: def?.description ?? 'Deployed agent instance',
+      status: agent.isActive ? 'live' : 'paused',
+      statusText: agent.isActive ? 'Running' : 'Paused',
+      lastRun: agent.lastRunAt ? new Date(agent.lastRunAt).toLocaleString() : 'Never',
+      color: agent.isActive ? 'var(--green)' : 'var(--amber)',
+      colorDim: agent.isActive ? 'var(--green-dim)' : 'var(--amber-dim)',
+    }
+  }), [agents, definitions])
+
+  const latestResults = useMemo(() => results.slice(0, 3), [results])
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 w-56 bg-white border-r border-gray-100 flex flex-col">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <span className="font-semibold text-gray-900">skove</span>
-        </div>
-        <nav className="flex-1 px-3 py-4 space-y-1">
-          {[
-            { label: 'Dashboard', href: '/dashboard', active: true },
-            { label: 'My agents', href: '/dashboard/agents' },
-            { label: 'Results', href: '/dashboard/results' },
-            { label: 'Alerts', href: '/dashboard/alerts' },
-            { label: 'Agent store', href: '/dashboard/store' },
-          ].map((item) => (
-            <a
-              key={item.label}
-              href={item.href}
-              className={`flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
-                item.active
-                  ? 'bg-gray-100 text-gray-900 font-medium'
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              {item.label}
-            </a>
-          ))}
-        </nav>
+    <div style={{ padding: '32px 36px', animation: 'fadeIn 0.4s ease' }}>
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.03em', marginBottom: 4 }}>
+          Good morning 👋
+        </h1>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+          Your dashboard updates automatically with the latest agent activity.
+        </p>
       </div>
 
-      {/* Main content */}
-      <div className="ml-56 p-8">
-        {/* Stats row */}
-        <div className="grid grid-cols-4 gap-4 mb-8">
-          {[
-            { label: 'Active agents', value: '0' },
-            { label: 'Results found', value: '0' },
-            { label: 'Alerts sent', value: '0' },
-            { label: 'Hours saved', value: '0h' },
-          ].map((stat) => (
-            <div key={stat.label} className="bg-white border border-gray-100 rounded-xl p-4">
-              <div className="text-xs text-gray-400 mb-1">{stat.label}</div>
-              <div className="text-2xl font-semibold text-gray-900">{stat.value}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Empty state — no agents yet */}
-        <div className="bg-white border border-gray-100 rounded-xl p-12 text-center">
-          <div className="text-4xl mb-4">🤖</div>
-          <div className="text-base font-medium text-gray-900 mb-2">No agents running yet</div>
-          <div className="text-sm text-gray-400 mb-6 max-w-sm mx-auto">
-            Browse the agent store and deploy your first agent. It'll start working immediately.
+      {loading ? (
+        <div style={{ color: 'var(--text-secondary)' }}>Loading dashboard…</div>
+      ) : error ? (
+        <div style={{ color: 'var(--red)' }}>{error}</div>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
+            {stats.map((stat) => (
+              <div key={stat.label} style={{
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                padding: '16px 18px',
+              }}>
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  {stat.label}
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 600, color: stat.color, letterSpacing: '-0.04em', marginBottom: 4, fontVariantNumeric: 'tabular-nums' }}>
+                  {stat.value}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{stat.delta}</div>
+              </div>
+            ))}
           </div>
-          <a
-            href="/dashboard/store"
-            className="inline-flex items-center bg-gray-900 text-white text-sm px-5 py-2.5 rounded-lg hover:bg-gray-700 transition-colors"
-          >
-            Browse agent store →
-          </a>
-        </div>
-      </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <h2 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>Running agents</h2>
+                <Link href="/dashboard/store" style={{
+                  fontSize: 12, color: 'var(--brand)', textDecoration: 'none',
+                  background: 'var(--brand-dim)', padding: '4px 10px', borderRadius: 6,
+                  border: '1px solid rgba(139,92,246,0.2)',
+                }}>+ Add agent</Link>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {runningAgents.length === 0 ? (
+                  <div style={{ color: 'var(--text-secondary)' }}>No agent instances are deployed yet. Deploy one from the store.</div>
+                ) : runningAgents.map((agent) => (
+                  <div key={agent.id} style={{
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    padding: '14px 16px',
+                    transition: 'border-color 0.15s',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+                      <div style={{
+                        width: 36, height: 36,
+                        background: agent.colorDim,
+                        border: `1px solid ${agent.color}30`,
+                        borderRadius: 10,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 18, flexShrink: 0,
+                      }}>{agent.icon}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 2 }}>{agent.name}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{agent.desc}</div>
+                      </div>
+                      <span style={{
+                        fontSize: 10, fontWeight: 600,
+                        padding: '2px 8px', borderRadius: 99,
+                        background: agent.status === 'live' ? 'var(--green-dim)' : 'var(--surface-4)',
+                        color: agent.status === 'live' ? 'var(--green)' : 'var(--text-tertiary)',
+                        border: `1px solid ${agent.status === 'live' ? 'rgba(34,197,94,0.2)' : 'var(--border)'}`,
+                      }}>{agent.status}</span>
+                    </div>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      paddingTop: 10, borderTop: '1px solid var(--border)',
+                    }}>
+                      <span style={{
+                        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                        background: agent.status === 'live' ? 'var(--green)' : 'var(--text-tertiary)',
+                        boxShadow: agent.status === 'live' ? '0 0 6px var(--green)' : 'none',
+                      }} />
+                      <span style={{ fontSize: 11, color: 'var(--text-secondary)', flex: 1 }}>{agent.statusText}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{agent.lastRun}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <h2 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>Latest results</h2>
+                <Link href="/dashboard/results" style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none' }}>View all →</Link>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {latestResults.length === 0 ? (
+                  <div style={{ color: 'var(--text-secondary)' }}>No results yet. Your active agents will show updates here.</div>
+                ) : latestResults.map((result) => (
+                  <div key={result.id} style={{
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    padding: '12px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}>
+                    <span style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: result.isRead ? 'var(--text-tertiary)' : 'var(--green)',
+                      boxShadow: result.isRead ? 'none' : '0 0 6px var(--green)',
+                      flexShrink: 0,
+                    }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {result.title}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                        {result.value ? `${result.value} · ` : ''}
+                        {typeof result.metadata === 'object' && result.metadata !== null && 'agentType' in result.metadata ? String((result.metadata as any).agentType) : 'Agent result'}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{new Date(result.createdAt).toLocaleString()}</span>
+                      {result.url ? (
+                        <a href={result.url} target="_blank" rel="noreferrer" style={{
+                          fontSize: 11, fontWeight: 500,
+                          padding: '3px 10px', borderRadius: 6,
+                          border: '1px solid var(--border)',
+                          background: 'var(--surface-3)',
+                          color: 'var(--text-secondary)',
+                          textDecoration: 'none',
+                        }}>Open</a>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Link href="/dashboard/store" style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                gap: 8, marginTop: 8,
+                background: 'var(--surface-2)',
+                border: '1px dashed var(--border)',
+                borderRadius: 12, padding: '14px',
+                fontSize: 13, color: 'var(--text-secondary)',
+                textDecoration: 'none',
+                transition: 'all 0.15s',
+              }}>
+                ⊞ Browse agent store
+              </Link>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
