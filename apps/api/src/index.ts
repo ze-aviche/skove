@@ -8,9 +8,13 @@ import { webhooksRouter } from './routes/webhooks'
 import { startScheduler } from './runner/scheduler'
 
 const app = express()
-const PORT = process.env.API_PORT || 3001
+const PORT = process.env.PORT || process.env.API_PORT || 3001
 
-app.use(cors({ origin: process.env.NEXT_PUBLIC_APP_URL, credentials: true }))
+const allowedOrigins = [
+  process.env.NEXT_PUBLIC_APP_URL,
+  'http://localhost:3000',
+].filter(Boolean) as string[]
+app.use(cors({ origin: allowedOrigins, credentials: true }))
 app.use(express.json())
 
 // Health check
