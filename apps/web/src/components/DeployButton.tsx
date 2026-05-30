@@ -163,7 +163,7 @@ export default function DeployButton({ agent }: DeployButtonProps) {
                   ) : (
                     <input
                       type={field.type === 'number' ? 'number' : 'text'}
-                      value={config[key] ?? ''}
+                      value={(config[key] ?? '') as string | number}
                       placeholder={field.placeholder ?? ''}
                       onChange={(event) => {
                         const value = field.type === 'number' ? Number(event.target.value) : event.target.value

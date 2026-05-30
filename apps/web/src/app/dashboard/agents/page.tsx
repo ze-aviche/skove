@@ -226,7 +226,7 @@ export default function AgentsPage() {
                   cursor: runningIds.has(a.id) ? 'not-allowed' : 'pointer',
                   opacity: runningIds.has(a.id) ? 0.6 : 1,
                 }}>{runningIds.has(a.id) ? 'Running…' : 'Run now'}</button>
-                <button onClick={() => openEditConfig(a)} style={{
+                <button onClick={() => { const orig = agents.find((ag) => ag.id === a.id); if (orig) openEditConfig(orig) }} style={{
                   fontSize: 12, padding: '6px 14px', borderRadius: 8,
                   border: '1px solid var(--border)',
                   background: 'var(--surface-3)',
@@ -350,7 +350,7 @@ export default function AgentsPage() {
                     ) : (
                       <input
                         type={field.type === 'number' ? 'number' : 'text'}
-                        value={editConfig[key] ?? ''}
+                        value={(editConfig[key] ?? '') as string | number}
                         placeholder={field.placeholder ?? ''}
                         onChange={(event) => {
                           const value = field.type === 'number' ? Number(event.target.value) : event.target.value
