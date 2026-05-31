@@ -30,6 +30,31 @@ function formatNextRun(iso: string | null): string {
   return `in ${Math.floor(hrs / 24)}d`
 }
 
+function getInstanceLabel(agentId: string, config: Record<string, unknown>): string | null {
+  switch (agentId) {
+    case 'flight-watcher':
+      if (config.origin && config.destination)
+        return `${config.origin}  →  ${config.destination}`
+      break
+    case 'job-application-tracker':
+      if (config.jobTitle)
+        return config.location ? `${config.jobTitle} · ${config.location}` : String(config.jobTitle)
+      break
+    case 'rental-listing-monitor':
+      if (config.city)
+        return `${config.city}${config.maxRent ? ` · max $${config.maxRent}` : ''}`
+      break
+    case 'stock-price-alert':
+      if (config.symbol)
+        return `${config.symbol}${config.targetPrice ? ` · below $${config.targetPrice}` : ''}`
+      break
+    case 'keyword-news-monitor':
+      if (config.keyword) return `"${config.keyword}"`
+      break
+  }
+  return null
+}
+
 const iconMap: Record<string, string> = {
   'flight-watcher': '✈️',
   'job-application-tracker': '💼',
@@ -79,6 +104,7 @@ export default function AgentsPage() {
       icon: iconMap[agent.agentId] ?? '🤖',
       name: def?.name ?? agent.agentId,
       desc: def?.description ?? 'Deployed agent instance',
+      label: getInstanceLabel(agent.agentId, agent.config as Record<string, unknown>),
       status: agent.isActive ? 'active' : 'paused',
       lastRun: formatRelative(agent.lastRunAt),
       nextRun: agent.isActive ? formatNextRun(agent.nextRunAt) : '—',
@@ -276,6 +302,20 @@ export default function AgentsPage() {
                     </span>
                   )}
                 </div>
+                {a.label && (
+                  <div style={{
+                    fontSize: 13, fontWeight: 500,
+                    color: 'var(--text-primary)',
+                    background: 'var(--surface-3)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    padding: '4px 10px',
+                    display: 'inline-block',
+                    marginBottom: 8,
+                    fontFamily: 'var(--font-mono)',
+                    letterSpacing: '0.01em',
+                  }}>{a.label}</div>
+                )}
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14 }}>{a.desc}</div>
 
                 {/* Metrics row */}
