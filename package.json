@@ -10,7 +10,8 @@
   },
   "scripts": {
     "dev": "turbo run dev",
-    "build": "turbo run build",
+    "build": "pnpm install --prod=false && pnpm --filter api build",
+    "start": "node apps/api/dist/index.js",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "db:migrate": "pnpm --filter api db:migrate",
