@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
-import { getAgentDefinitions, getMyAgents, toggleAgent, deleteAgent, updateAgentConfig, runAgent, AgentConfigField, AgentDefinition, AgentInstance } from '@/lib/api'
+import { getAgentDefinitions, getMyAgents, toggleAgent, deleteAgent, updateAgentConfig, runAgent, deployAgent, AgentConfigField, AgentDefinition, AgentInstance } from '@/lib/api'
 import ConfigField from '@/components/ConfigField'
 import { isValidAirport } from '@/components/AirportPicker'
 
@@ -26,6 +26,10 @@ export default function AgentsPage() {
   const [editErrors, setEditErrors] = useState<string[]>([])
   const [editLoading, setEditLoading] = useState(false)
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set())
+  const [cloningAgent, setCloningAgent] = useState<AgentInstance | null>(null)
+  const [cloneConfig, setCloneConfig] = useState<Record<string, unknown>>({})
+  const [cloneErrors, setCloneErrors] = useState<string[]>([])
+  const [cloneLoading, setCloneLoading] = useState(false)
   const auth = useAuth()
   const { showToast } = useToast()
 
@@ -70,6 +74,55 @@ export default function AgentsPage() {
         return [key, '']
       })
     ) as Record<string, unknown>
+  }
+
+  const openClone = (agent: AgentInstance) => {
+    setCloningAgent(agent)
+    setCloneConfig({ ...(agent.config ?? {}) })
+    setCloneErrors([])
+  }
+
+  const closeClone = () => {
+    setCloningAgent(null)
+    setCloneErrors([])
+  }
+
+  const handleCloneChange = (key: string, value: unknown) => {
+    setCloneConfig((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const validateCloneConfig = () => {
+    if (!cloningAgent) return false
+    const def = definitions[cloningAgent.agentId]
+    if (!def) return false
+    const errs: string[] = []
+    Object.entries(def.configSchema).forEach(([key, field]) => {
+      const val = cloneConfig[key]
+      const empty = val === '' || val === null || val === undefined || (typeof val === 'string' && val.trim() === '')
+      if (field.required && empty) errs.push(`${field.label} is required.`)
+      else if (field.type === 'airport' && !empty && !isValidAirport(String(val)))
+        errs.push(`${field.label}: enter a valid airport, e.g. "Dallas (DAL)".`)
+    })
+    setCloneErrors(errs)
+    return errs.length === 0
+  }
+
+  const submitClone = async () => {
+    if (!cloningAgent || !validateCloneConfig()) return
+    setCloneLoading(true)
+    try {
+      const token = await auth.getToken()
+      await deployAgent(cloningAgent.agentId, cloneConfig, token)
+      const updated = await getMyAgents(token)
+      setAgents(updated)
+      showToast({ message: 'New agent instance deployed', variant: 'success' })
+      window.dispatchEvent(new CustomEvent('agents:changed'))
+      closeClone()
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'Failed to deploy', variant: 'error' })
+    } finally {
+      setCloneLoading(false)
+    }
   }
 
   const openEditConfig = (agent: AgentInstance) => {
@@ -226,6 +279,12 @@ export default function AgentsPage() {
                   cursor: runningIds.has(a.id) ? 'not-allowed' : 'pointer',
                   opacity: runningIds.has(a.id) ? 0.6 : 1,
                 }}>{runningIds.has(a.id) ? 'Running…' : 'Run now'}</button>
+                <button onClick={() => { const orig = agents.find((ag) => ag.id === a.id); if (orig) openClone(orig) }} style={{
+                  fontSize: 12, padding: '6px 14px', borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface-3)',
+                  color: 'var(--text-secondary)', cursor: 'pointer',
+                }}>Duplicate</button>
                 <button onClick={() => { const orig = agents.find((ag) => ag.id === a.id); if (orig) openEditConfig(orig) }} style={{
                   fontSize: 12, padding: '6px 14px', borderRadius: 8,
                   border: '1px solid var(--border)',
@@ -278,6 +337,71 @@ export default function AgentsPage() {
           </div>
         ))}
       </div>
+
+      {cloningAgent && (() => {
+        const definition = definitions[cloningAgent.agentId]
+        const fields = definition ? Object.entries(definition.configSchema) : []
+        return (
+          <div style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(15, 23, 42, 0.55)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9999, padding: 16,
+          }}>
+            <div style={{
+              width: 'min(660px, 100%)',
+              background: 'var(--surface-0)',
+              border: '1px solid var(--border)',
+              borderRadius: 18,
+              boxShadow: '0 32px 80px rgba(15, 23, 42, 0.18)',
+              padding: 24,
+              display: 'flex', flexDirection: 'column', gap: 18,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Duplicate: {definition?.name ?? cloningAgent.agentId}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                    Pre-filled with your current config — adjust and deploy as a new instance.
+                  </div>
+                </div>
+                <button onClick={closeClone} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 18 }}>×</button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
+                {fields.map(([key, field]) => (
+                  <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {field.label}{field.required ? ' *' : ''}
+                    </span>
+                    <ConfigField fieldKey={key} field={field} value={cloneConfig[key]} onChange={handleCloneChange} />
+                  </label>
+                ))}
+              </div>
+
+              {cloneErrors.length > 0 && (
+                <div style={{ color: 'var(--error)', fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {cloneErrors.map((e) => <span key={e}>{e}</span>)}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
+                <button onClick={closeClone} style={{
+                  fontSize: 12, fontWeight: 500, padding: '10px 16px', borderRadius: 10,
+                  border: '1px solid var(--border)', background: 'var(--surface-2)',
+                  color: 'var(--text-secondary)', cursor: 'pointer',
+                }}>Cancel</button>
+                <button onClick={submitClone} disabled={cloneLoading} style={{
+                  fontSize: 12, fontWeight: 500, padding: '10px 16px', borderRadius: 10,
+                  border: '1px solid var(--brand)', background: 'var(--brand-dim)',
+                  color: 'var(--brand)', cursor: 'pointer',
+                }}>{cloneLoading ? 'Deploying…' : 'Deploy new instance'}</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {editingAgent && (() => {
         const definition = definitions[editingAgent.agentId]
