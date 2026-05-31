@@ -120,3 +120,24 @@ export function runAgent(instanceId: string, token?: string): Promise<{ ran: boo
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
 }
+
+export function getResumeStatus(token?: string): Promise<{ hasResume: boolean; wordCount: number }> {
+  return fetchJson('/api/resume', token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
+}
+
+export async function uploadResume(file: File, token?: string): Promise<{ success: boolean; wordCount: number; pages: number }> {
+  const form = new FormData()
+  form.append('resume', file)
+
+  const res = await fetch(`${apiUrl}/api/resume`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Upload failed ${res.status}: ${text}`)
+  }
+  return res.json()
+}

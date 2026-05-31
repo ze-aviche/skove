@@ -12,6 +12,7 @@ const navItems = [
   { label: 'Results', href: '/dashboard/results', icon: '◈' },
   { label: 'Alerts', href: '/dashboard/alerts', icon: '◎' },
   { label: 'Agent store', href: '/dashboard/store', icon: '⊞' },
+  { label: 'Profile', href: '/dashboard/profile', icon: '◉' },
 ]
 
 export default function Sidebar() {

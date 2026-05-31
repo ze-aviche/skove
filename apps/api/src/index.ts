@@ -7,6 +7,7 @@ import cors from 'cors'
 import { agentsRouter } from './routes/agents'
 import { resultsRouter } from './routes/results'
 import { webhooksRouter } from './routes/webhooks'
+import { resumeRouter } from './routes/resume'
 import { startScheduler } from './runner/scheduler'
 
 const app = express()
@@ -26,6 +27,7 @@ app.get('/health', (_, res) => res.json({ status: 'ok', service: 'skove-api' }))
 app.use('/api/agents', agentsRouter)
 app.use('/api/results', resultsRouter)
 app.use('/api/webhooks', webhooksRouter)
+app.use('/api/resume', resumeRouter)
 
 app.listen(PORT, () => {
   console.log(`Skove API running on http://localhost:${PORT}`)

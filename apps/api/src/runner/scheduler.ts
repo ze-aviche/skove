@@ -71,7 +71,7 @@ export async function runInstance(instanceId: string) {
 
   console.log(`[scheduler] Running ${definition.id} for user ${instance.userId}`)
 
-  const results = await runner(instance.config as Record<string, unknown>)
+  const results = await runner(instance.config as Record<string, unknown>, { userId: instance.userId })
 
   for (const result of results) {
     await db.insert(agentResults).values({

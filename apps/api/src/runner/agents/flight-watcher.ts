@@ -51,7 +51,7 @@ function formatDuration(minutes: number): string {
   return `${h}h ${m}m`
 }
 
-export async function runFlightWatcher(config: Record<string, unknown>): Promise<AgentRunResult[]> {
+export async function runFlightWatcher(config: Record<string, unknown>, _ctx?: { userId: string }): Promise<AgentRunResult[]> {
   const c = config as FlightWatcherConfig
   const origin = extractIata(String(c.origin || 'DAL'))
   const destination = extractIata(String(c.destination || 'JFK'))

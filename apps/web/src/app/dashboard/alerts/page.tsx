@@ -36,6 +36,7 @@ export default function AlertsPage() {
   const [alerts, setAlerts] = useState<AgentResult[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [expandedCoverLetter, setExpandedCoverLetter] = useState<string | null>(null)
   const auth = useAuth()
   const { showToast } = useToast()
 
@@ -134,14 +135,66 @@ export default function AlertsPage() {
                       }} />
                     )}
                   </div>
+                  {/* AI match score */}
+                  {alert.metadata && typeof alert.metadata === 'object' && 'matchScore' in alert.metadata && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <span style={{
+                        fontSize: 11, fontWeight: 700,
+                        padding: '2px 8px', borderRadius: 99,
+                        background: Number(alert.metadata.matchScore) >= 8 ? 'var(--success-dim)' : 'var(--brand-dim)',
+                        color: Number(alert.metadata.matchScore) >= 8 ? 'var(--success)' : 'var(--brand)',
+                        border: `1px solid ${Number(alert.metadata.matchScore) >= 8 ? 'rgba(16,185,129,0.2)' : 'rgba(124,58,237,0.2)'}`,
+                      }}>
+                        AI Match {String(alert.metadata.matchScore)}/10
+                      </span>
+                      {'matchReasoning' in alert.metadata && alert.metadata.matchReasoning && (
+                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                          {String(alert.metadata.matchReasoning)}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{body}</div>
-                  {alert.url && (
-                    <a href={alert.url} target="_blank" rel="noreferrer" style={{
-                      display: 'inline-block', marginTop: 10,
-                      fontSize: 11, fontWeight: 500,
-                      color: 'var(--brand)',
-                      textDecoration: 'none',
-                    }}>Open source</a>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+                    {alert.url && (
+                      <a href={alert.url} target="_blank" rel="noreferrer" style={{
+                        fontSize: 11, fontWeight: 500,
+                        color: 'var(--brand)',
+                        textDecoration: 'none',
+                      }}>Apply →</a>
+                    )}
+                    {alert.metadata && typeof alert.metadata === 'object' && 'coverLetter' in alert.metadata && (
+                      <button
+                        onClick={() => setExpandedCoverLetter(
+                          expandedCoverLetter === alert.id ? null : alert.id
+                        )}
+                        style={{
+                          fontSize: 11, fontWeight: 500,
+                          padding: '4px 10px', borderRadius: 7,
+                          border: '1px solid var(--border)',
+                          background: 'var(--surface-3)',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {expandedCoverLetter === alert.id ? 'Hide cover letter' : '📝 View cover letter'}
+                      </button>
+                    )}
+                  </div>
+                  {expandedCoverLetter === alert.id && alert.metadata && typeof alert.metadata === 'object' && 'coverLetter' in alert.metadata && (
+                    <div style={{
+                      marginTop: 12,
+                      padding: '14px 16px',
+                      background: 'var(--surface-1)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 10,
+                      fontSize: 12,
+                      color: 'var(--text-secondary)',
+                      lineHeight: 1.7,
+                      whiteSpace: 'pre-wrap',
+                    }}>
+                      {String(alert.metadata.coverLetter)}
+                    </div>
                   )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>

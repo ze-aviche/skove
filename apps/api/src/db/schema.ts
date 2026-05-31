@@ -4,6 +4,7 @@ import { pgTable, text, timestamp, jsonb, boolean, uuid } from 'drizzle-orm/pg-c
 export const users = pgTable('users', {
   id: text('id').primaryKey(), // Clerk user ID
   email: text('email').notNull(),
+  resumeText: text('resume_text'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 

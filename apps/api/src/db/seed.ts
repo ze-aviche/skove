@@ -28,6 +28,7 @@ const builtInAgents = [
       location: { type: 'string', label: 'Location', required: true, placeholder: 'Remote / Austin, TX' },
       minSalary: { type: 'number', label: 'Minimum salary ($)', required: false },
       keywords: { type: 'string', label: 'Keywords', required: false, placeholder: 'PM, product, roadmap' },
+      matchThreshold: { type: 'number', label: 'Min AI match score (1–10)', required: false, placeholder: '7' },
     },
     schedule: '0 */4 * * *',
     authorId: null,
