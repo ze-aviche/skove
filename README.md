@@ -35,7 +35,7 @@ skove/
 | Auth | Clerk |
 | Email | Resend |
 | Payments | Stripe |
-| Deployment | Vercel (web), Railway (api) |
+| Deployment | Railway (web + api) |
 
 ## Getting Started
 
@@ -126,9 +126,9 @@ Supabase's direct connection and dedicated pooler are IPv6-only on the free plan
 3. Copy the **Transaction mode** URL — port `6543`, username format `postgres.[project-ref]`
 4. Set this as `DATABASE_URL` in Railway
 
-### Web — Vercel
+### Web — Railway
 
-Deploy the `apps/web` directory to Vercel with `NEXT_PUBLIC_API_URL` set to the Railway API URL.
+The Next.js frontend runs as a separate Railway service. Set `NEXT_PUBLIC_API_URL` to the Railway API service URL and `NEXT_PUBLIC_APP_URL` to `https://skove.app`.
 
 ## Contributing
 
