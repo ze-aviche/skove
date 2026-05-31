@@ -8,6 +8,28 @@ import { getAgentDefinitions, getMyAgents, toggleAgent, deleteAgent, updateAgent
 import ConfigField from '@/components/ConfigField'
 import { isValidAirport } from '@/components/AirportPicker'
 
+function formatRelative(iso: string | null): string {
+  if (!iso) return 'Never'
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
+function formatNextRun(iso: string | null): string {
+  if (!iso) return '—'
+  const diff = new Date(iso).getTime() - Date.now()
+  if (diff < 0) return 'Soon'
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `in ${mins}m`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `in ${hrs}h`
+  return `in ${Math.floor(hrs / 24)}d`
+}
+
 const iconMap: Record<string, string> = {
   'flight-watcher': '✈️',
   'job-application-tracker': '💼',
@@ -57,12 +79,11 @@ export default function AgentsPage() {
       icon: iconMap[agent.agentId] ?? '🤖',
       name: def?.name ?? agent.agentId,
       desc: def?.description ?? 'Deployed agent instance',
-      status: agent.isActive ? 'live' : 'paused',
-      results: '–',
-      lastRun: agent.lastRunAt ? new Date(agent.lastRunAt).toLocaleString() : 'Never',
-      runs: '–',
-      color: agent.isActive ? 'var(--green)' : 'var(--amber)',
-      colorDim: agent.isActive ? 'var(--green-dim)' : 'var(--amber-dim)',
+      status: agent.isActive ? 'active' : 'paused',
+      lastRun: formatRelative(agent.lastRunAt),
+      nextRun: agent.isActive ? formatNextRun(agent.nextRunAt) : '—',
+      color: agent.isActive ? 'var(--success)' : 'var(--warning)',
+      colorDim: agent.isActive ? 'var(--success-dim)' : 'var(--warning-dim)',
     }
   }), [agents, definitions])
 
@@ -227,26 +248,45 @@ export default function AgentsPage() {
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
                   <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>{a.name}</span>
-                  <span style={{
-                    fontSize: 10, fontWeight: 600,
-                    padding: '2px 8px', borderRadius: 99,
-                    background: a.status === 'live' ? 'var(--green-dim)' : 'var(--surface-4)',
-                    color: a.status === 'live' ? 'var(--green)' : 'var(--text-tertiary)',
-                    border: `1px solid ${a.status === 'live' ? 'rgba(34,197,94,0.2)' : 'var(--border)'}`,
-                  }}>{a.status}</span>
+                  {runningIds.has(a.id) ? (
+                    <span style={{
+                      fontSize: 10, fontWeight: 600,
+                      padding: '2px 8px', borderRadius: 99,
+                      background: 'rgba(124,58,237,0.15)',
+                      color: 'var(--brand)',
+                      border: '1px solid rgba(124,58,237,0.3)',
+                      display: 'flex', alignItems: 'center', gap: 4,
+                    }}>
+                      <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'var(--brand)', animation: 'pulse 1s infinite' }} />
+                      Running now
+                    </span>
+                  ) : (
+                    <span style={{
+                      fontSize: 10, fontWeight: 600,
+                      padding: '2px 8px', borderRadius: 99,
+                      background: a.status === 'active' ? 'var(--success-dim)' : 'var(--surface-4)',
+                      color: a.status === 'active' ? 'var(--success)' : 'var(--text-tertiary)',
+                      border: `1px solid ${a.status === 'active' ? 'rgba(16,185,129,0.2)' : 'var(--border)'}`,
+                      display: 'flex', alignItems: 'center', gap: 4,
+                    }}>
+                      {a.status === 'active' && (
+                        <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'var(--success)' }} />
+                      )}
+                      {a.status}
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14 }}>{a.desc}</div>
 
                 {/* Metrics row */}
-                <div style={{ display: 'flex', gap: 20 }}>
+                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
                   {[
-                    { label: 'Results found', val: a.results },
-                    { label: 'Total runs', val: a.runs },
                     { label: 'Last run', val: a.lastRun },
+                    { label: 'Next run', val: runningIds.has(a.id) ? 'Running…' : a.nextRun },
                   ].map(m => (
                     <div key={m.label}>
                       <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{m.label}</div>
-                      <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>{m.val}</div>
+                      <div style={{ fontSize: 14, fontWeight: 500, color: m.label === 'Next run' && a.status === 'active' ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{m.val}</div>
                     </div>
                   ))}
                 </div>
@@ -306,11 +346,11 @@ export default function AgentsPage() {
                   }
                 }} style={{
                   fontSize: 12, padding: '6px 14px', borderRadius: 8,
-                  border: `1px solid ${a.status === 'live' ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}`,
-                  background: a.status === 'live' ? 'rgba(239,68,68,0.08)' : 'var(--green-dim)',
-                  color: a.status === 'live' ? 'var(--red)' : 'var(--green)',
+                  border: `1px solid ${a.status === 'active' ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.3)'}`,
+                  background: a.status === 'active' ? 'rgba(239,68,68,0.08)' : 'var(--success-dim)',
+                  color: a.status === 'active' ? 'var(--error)' : 'var(--success)',
                   cursor: 'pointer',
-                }}>{a.status === 'live' ? 'Pause' : 'Resume'}</button>
+                }}>{a.status === 'active' ? 'Pause' : 'Resume'}</button>
                 <button onClick={async () => {
                   if (!window.confirm('Undeploy this agent and remove it from your dashboard?')) {
                     return
