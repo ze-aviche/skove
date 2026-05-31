@@ -1,43 +1,5 @@
 import { AgentRunResult } from './flight-watcher'
 
-const COMPANIES = [
-  'Stripe', 'Notion', 'Linear', 'Vercel', 'Figma', 'Retool', 'Airtable',
-  'Shopify', 'Atlassian', 'HubSpot', 'Twilio', 'Datadog', 'MongoDB',
-  'Snowflake', 'Cloudflare', 'PagerDuty', 'Intercom', 'Brex', 'Rippling',
-  'Gusto', 'Carta', 'Plaid', 'Mix panel', 'Segment', 'LaunchDarkly',
-]
-
-const TITLE_VARIANTS: Record<string, string[]> = {
-  default: ['Senior', 'Staff', 'Lead', 'Principal', 'Sr.'],
-}
-
-const JOB_BOARDS = [
-  { name: 'LinkedIn', url: 'https://linkedin.com/jobs/search/?keywords=' },
-  { name: 'Indeed', url: 'https://indeed.com/jobs?q=' },
-  { name: 'Greenhouse', url: 'https://boards.greenhouse.io/' },
-  { name: 'Lever', url: 'https://jobs.lever.co/' },
-]
-
-function randomInt(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min
-}
-
-function randomFrom<T>(arr: T[]): T {
-  return arr[randomInt(0, arr.length - 1)]
-}
-
-function daysAgo(n: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return d.toISOString().split('T')[0]
-}
-
-function formatSalary(base: number): string {
-  const lo = Math.round(base / 1000) * 1000
-  const hi = lo + randomInt(20000, 40000)
-  return `$${(lo / 1000).toFixed(0)}k–$${(hi / 1000).toFixed(0)}k`
-}
-
 interface JobTrackerConfig {
   jobTitle?: string
   location?: string
@@ -45,45 +7,105 @@ interface JobTrackerConfig {
   keywords?: string
 }
 
+interface JSearchJob {
+  job_id: string
+  employer_name: string
+  job_title: string
+  job_city: string
+  job_state: string
+  job_country: string
+  job_is_remote: boolean
+  job_posted_at_datetime_utc: string
+  job_min_salary: number | null
+  job_max_salary: number | null
+  job_salary_currency: string | null
+  job_apply_link: string
+  job_employment_type: string
+}
+
+function formatSalary(min: number | null, max: number | null, currency: string | null): string | undefined {
+  if (!min && !max) return undefined
+  const sym = currency === 'USD' ? '$' : (currency ?? '')
+  const lo = min ? `${sym}${Math.round(min / 1000)}k` : null
+  const hi = max ? `${sym}${Math.round(max / 1000)}k` : null
+  if (lo && hi) return `${lo}–${hi}`
+  return lo ?? hi ?? undefined
+}
+
+function postedLabel(iso: string | null): string {
+  if (!iso) return 'Recently'
+  const diff = Date.now() - new Date(iso).getTime()
+  const days = Math.floor(diff / 86400000)
+  if (days === 0) return 'Today'
+  if (days === 1) return '1 day ago'
+  if (days < 7) return `${days} days ago`
+  if (days < 14) return '1 week ago'
+  return `${Math.floor(days / 7)} weeks ago`
+}
+
+async function fetchFromJSearch(query: string, apiKey: string): Promise<JSearchJob[]> {
+  const url = new URL('https://jsearch.p.rapidapi.com/search')
+  url.searchParams.set('query', query)
+  url.searchParams.set('page', '1')
+  url.searchParams.set('num_pages', '1')
+  url.searchParams.set('date_posted', 'week')
+
+  const res = await fetch(url.toString(), {
+    headers: {
+      'X-RapidAPI-Key': apiKey,
+      'X-RapidAPI-Host': 'jsearch.p.rapidapi.com',
+    },
+  })
+
+  if (!res.ok) throw new Error(`JSearch API error: ${res.status}`)
+  const data = await res.json() as { data: JSearchJob[] }
+  return data.data ?? []
+}
+
 export async function runJobApplicationTracker(config: Record<string, unknown>): Promise<AgentRunResult[]> {
   const c = config as JobTrackerConfig
   const jobTitle = String(c.jobTitle || 'Software Engineer')
   const location = String(c.location || 'Remote')
-  const minSalary = Number(c.minSalary) || 80000
+  const minSalary = Number(c.minSalary) || 0
+  const keywords = c.keywords ? String(c.keywords) : ''
 
-  const results: AgentRunResult[] = []
-  const numListings = randomInt(2, 4)
-  const usedCompanies = new Set<string>()
+  const apiKey = process.env.RAPIDAPI_KEY
+  if (!apiKey) throw new Error('RAPIDAPI_KEY is not set')
 
-  for (let i = 0; i < numListings; i++) {
-    let company = randomFrom(COMPANIES)
-    while (usedCompanies.has(company)) company = randomFrom(COMPANIES)
-    usedCompanies.add(company)
+  const isRemote = location.toLowerCase().includes('remote')
+  const queryParts = [jobTitle]
+  if (keywords) queryParts.push(keywords)
+  if (!isRemote) queryParts.push(`in ${location}`)
+  if (isRemote) queryParts.push('remote')
+  const query = queryParts.join(' ')
 
-    const prefix = randomFrom(TITLE_VARIANTS.default)
-    const fullTitle = `${prefix} ${jobTitle}`
-    const salary = formatSalary(minSalary + randomInt(0, 30000))
-    const postedDaysAgo = randomInt(0, 4)
-    const board = randomFrom(JOB_BOARDS)
-    const isRemote = location.toLowerCase().includes('remote')
-    const displayLocation = isRemote ? 'Remote' : location
+  const jobs = await fetchFromJSearch(query, apiKey)
 
-    results.push({
-      title: `${fullTitle} @ ${company}`,
-      value: salary,
-      url: `${board.url}${encodeURIComponent(jobTitle)}`,
-      metadata: {
-        company,
-        jobTitle: fullTitle,
-        location: displayLocation,
-        salary,
-        postedDate: daysAgo(postedDaysAgo),
-        postedLabel: postedDaysAgo === 0 ? 'Today' : `${postedDaysAgo}d ago`,
-        board: board.name,
-        agentType: 'job-application-tracker',
-      },
+  return jobs
+    .filter((job) => {
+      if (minSalary > 0 && job.job_min_salary && job.job_min_salary < minSalary) return false
+      return true
     })
-  }
+    .slice(0, 5)
+    .map((job) => {
+      const salary = formatSalary(job.job_min_salary, job.job_max_salary, job.job_salary_currency)
+      const jobLocation = job.job_is_remote
+        ? 'Remote'
+        : [job.job_city, job.job_state].filter(Boolean).join(', ') || job.job_country
 
-  return results
+      return {
+        title: `${job.job_title} @ ${job.employer_name}`,
+        value: salary,
+        url: job.job_apply_link,
+        metadata: {
+          company: job.employer_name,
+          jobTitle: job.job_title,
+          location: jobLocation,
+          salary,
+          postedLabel: postedLabel(job.job_posted_at_datetime_utc),
+          employmentType: job.job_employment_type,
+          agentType: 'job-application-tracker',
+        },
+      }
+    })
 }
