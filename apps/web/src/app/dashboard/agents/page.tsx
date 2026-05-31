@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
 import { getAgentDefinitions, getMyAgents, toggleAgent, deleteAgent, updateAgentConfig, runAgent, AgentConfigField, AgentDefinition, AgentInstance } from '@/lib/api'
+import ConfigField from '@/components/ConfigField'
+import { isValidAirport } from '@/components/AirportPicker'
 
 const iconMap: Record<string, string> = {
   'flight-watcher': '✈️',
@@ -96,21 +98,19 @@ export default function AgentsPage() {
     const def = definitions[editingAgent.agentId]
     if (!def) return false
 
-    const missing = Object.entries(def.configSchema)
-      .filter(([, field]) => field.required)
-      .filter(([key]) => {
-        const val = editConfig[key]
-        return val === '' || val === null || val === undefined || (typeof val === 'string' && val.trim() === '')
-      })
-      .map(([key]) => key)
+    const errs: string[] = []
+    Object.entries(def.configSchema).forEach(([key, field]) => {
+      const val = editConfig[key]
+      const empty = val === '' || val === null || val === undefined || (typeof val === 'string' && val.trim() === '')
+      if (field.required && empty) {
+        errs.push(`${field.label} is required.`)
+      } else if (field.type === 'airport' && !empty && !isValidAirport(String(val))) {
+        errs.push(`${field.label}: enter a valid airport, e.g. "Dallas (DAL)".`)
+      }
+    })
 
-    if (missing.length > 0) {
-      setEditErrors(missing.map((key) => `${def.configSchema[key].label} is required.`))
-      return false
-    }
-
-    setEditErrors([])
-    return true
+    setEditErrors(errs)
+    return errs.length === 0
   }
 
   const submitEditConfig = async () => {
@@ -320,52 +320,12 @@ export default function AgentsPage() {
                     <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
                       {field.label}{field.required ? ' *' : ''}
                     </span>
-                    {field.type === 'select' ? (
-                      <select
-                        value={String(editConfig[key] ?? '')}
-                        onChange={(event) => handleEditChange(key, event.target.value)}
-                        style={{
-                          minHeight: 42,
-                          borderRadius: 12,
-                          border: '1px solid var(--border)',
-                          padding: '10px 12px',
-                          background: 'var(--surface-1)',
-                          color: 'var(--text-primary)',
-                        }}
-                      >
-                        <option value="">Select an option</option>
-                        {(field.options ?? []).map((option) => (
-                          <option key={option} value={option}>{option}</option>
-                        ))}
-                      </select>
-                    ) : field.type === 'boolean' ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(editConfig[key])}
-                          onChange={(event) => handleEditChange(key, event.target.checked)}
-                        />
-                        <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{field.placeholder ?? ''}</span>
-                      </div>
-                    ) : (
-                      <input
-                        type={field.type === 'number' ? 'number' : 'text'}
-                        value={(editConfig[key] ?? '') as string | number}
-                        placeholder={field.placeholder ?? ''}
-                        onChange={(event) => {
-                          const value = field.type === 'number' ? Number(event.target.value) : event.target.value
-                          handleEditChange(key, value)
-                        }}
-                        style={{
-                          minHeight: 42,
-                          borderRadius: 12,
-                          border: '1px solid var(--border)',
-                          padding: '10px 12px',
-                          background: 'var(--surface-1)',
-                          color: 'var(--text-primary)',
-                        }}
-                      />
-                    )}
+                    <ConfigField
+                      fieldKey={key}
+                      field={field}
+                      value={editConfig[key]}
+                      onChange={handleEditChange}
+                    />
                   </label>
                 ))}
               </div>

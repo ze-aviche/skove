@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@clerk/nextjs'
 import { AgentConfigField, deployAgent } from '@/lib/api'
 import { useToast } from '@/app/providers'
+import ConfigField from './ConfigField'
+import { isValidAirport } from './AirportPicker'
 
 type DeployButtonProps = {
   agent: {
@@ -50,21 +52,20 @@ export default function DeployButton({ agent }: DeployButtonProps) {
   }
 
   const validateConfig = () => {
-    const missing = configFields
-      .filter(([, field]) => field.required)
-      .filter(([key, field]) => {
-        const val = config[key]
-        return val === '' || val === null || val === undefined || (typeof val === 'string' && val.trim() === '')
-      })
-      .map(([key]) => key)
+    const errs: string[] = []
 
-    if (missing.length > 0) {
-      setErrors(missing.map((key) => `${agent.configSchema[key].label} is required.`))
-      return false
-    }
+    configFields.forEach(([key, field]) => {
+      const val = config[key]
+      const empty = val === '' || val === null || val === undefined || (typeof val === 'string' && val.trim() === '')
+      if (field.required && empty) {
+        errs.push(`${field.label} is required.`)
+      } else if (field.type === 'airport' && !empty && !isValidAirport(String(val))) {
+        errs.push(`${field.label}: enter a valid airport, e.g. "Dallas (DAL)".`)
+      }
+    })
 
-    setErrors([])
-    return true
+    setErrors(errs)
+    return errs.length === 0
   }
 
   const submit = async () => {
@@ -133,52 +134,12 @@ export default function DeployButton({ agent }: DeployButtonProps) {
                   <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
                     {field.label}{field.required ? ' *' : ''}
                   </span>
-                  {field.type === 'select' ? (
-                    <select
-                      value={String(config[key] ?? '')}
-                      onChange={(event) => handleChange(key, event.target.value)}
-                      style={{
-                        minHeight: 42,
-                        borderRadius: 12,
-                        border: '1px solid var(--border)',
-                        padding: '10px 12px',
-                        background: 'var(--surface-1)',
-                        color: 'var(--text-primary)',
-                      }}
-                    >
-                      <option value="">Select an option</option>
-                      {(field.options ?? []).map((option) => (
-                        <option key={option} value={option}>{option}</option>
-                      ))}
-                    </select>
-                  ) : field.type === 'boolean' ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <input
-                        type="checkbox"
-                        checked={Boolean(config[key])}
-                        onChange={(event) => handleChange(key, event.target.checked)}
-                      />
-                      <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{field.placeholder ?? ''}</span>
-                    </div>
-                  ) : (
-                    <input
-                      type={field.type === 'number' ? 'number' : 'text'}
-                      value={(config[key] ?? '') as string | number}
-                      placeholder={field.placeholder ?? ''}
-                      onChange={(event) => {
-                        const value = field.type === 'number' ? Number(event.target.value) : event.target.value
-                        handleChange(key, value)
-                      }}
-                      style={{
-                        minHeight: 42,
-                        borderRadius: 12,
-                        border: '1px solid var(--border)',
-                        padding: '10px 12px',
-                        background: 'var(--surface-1)',
-                        color: 'var(--text-primary)',
-                      }}
-                    />
-                  )}
+                  <ConfigField
+                    fieldKey={key}
+                    field={field}
+                    value={config[key]}
+                    onChange={handleChange}
+                  />
                 </label>
               ))}
             </div>

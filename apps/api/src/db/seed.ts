@@ -1,5 +1,4 @@
 import 'dotenv/config'
-import { eq } from 'drizzle-orm'
 import { db } from './index'
 import { agentDefinitions } from './schema'
 
@@ -9,11 +8,11 @@ const builtInAgents = [
     name: 'Flight price watcher',
     description: 'Monitors a route and alerts when price drops below your target.',
     configSchema: {
-      origin: { type: 'string', label: 'Origin airport or city', required: true, placeholder: 'Dallas (DAL)' },
-      destination: { type: 'string', label: 'Destination airport or city', required: true, placeholder: 'New York (JFK)' },
+      origin: { type: 'airport', label: 'Origin airport or city', required: true, placeholder: 'Dallas (DAL)' },
+      destination: { type: 'airport', label: 'Destination airport or city', required: true, placeholder: 'New York (JFK)' },
       maxPrice: { type: 'number', label: 'Max price ($)', required: true, placeholder: '300' },
-      departAfter: { type: 'string', label: 'Depart after', placeholder: '2026-06-10' },
-      returnBefore: { type: 'string', label: 'Return before', placeholder: '2026-06-20' },
+      departAfter: { type: 'date', label: 'Depart after', placeholder: '' },
+      returnBefore: { type: 'date', label: 'Return before', placeholder: '' },
     },
     schedule: '0 */2 * * *',
     authorId: null,
@@ -78,12 +77,6 @@ const builtInAgents = [
 async function seed() {
   console.log('Seeding built-in agent definitions...')
   for (const agent of builtInAgents) {
-    const existing = await db.select().from(agentDefinitions).where(eq(agentDefinitions.id, agent.id))
-    if (existing.length > 0) {
-      console.log(`Skipping existing agent: ${agent.id}`)
-      continue
-    }
-
     await db.insert(agentDefinitions).values({
       id: agent.id,
       name: agent.name,
@@ -92,8 +85,17 @@ async function seed() {
       schedule: agent.schedule,
       authorId: agent.authorId,
       isPublished: agent.isPublished,
+    }).onConflictDoUpdate({
+      target: agentDefinitions.id,
+      set: {
+        name: agent.name,
+        description: agent.description,
+        configSchema: agent.configSchema,
+        schedule: agent.schedule,
+        isPublished: agent.isPublished,
+      },
     })
-    console.log(`Inserted agent: ${agent.id}`)
+    console.log(`Upserted agent: ${agent.id}`)
   }
   console.log('Seeding complete.')
 }
