@@ -129,19 +129,21 @@ export default function DeployButton({ agent }: DeployButtonProps) {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
-              {configFields.map(([key, field]) => (
-                <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {field.label}{field.required ? ' *' : ''}
-                  </span>
-                  <ConfigField
-                    fieldKey={key}
-                    field={field}
-                    value={config[key]}
-                    onChange={handleChange}
-                  />
-                </label>
-              ))}
+              {configFields
+                .filter(([, field]) => !field.showWhen || String(config[field.showWhen.field] ?? '') === field.showWhen.value)
+                .map(([key, field]) => (
+                  <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {field.label}{field.required ? ' *' : ''}
+                    </span>
+                    <ConfigField
+                      fieldKey={key}
+                      field={field}
+                      value={config[key]}
+                      onChange={handleChange}
+                    />
+                  </label>
+                ))}
             </div>
 
             {errors.length > 0 && (

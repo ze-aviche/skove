@@ -28,6 +28,7 @@ export type AgentConfigField = {
   required?: boolean
   placeholder?: string
   options?: string[]
+  showWhen?: { field: string; value: string }
 }
 
 export type AgentDefinition = {

@@ -10,9 +10,10 @@ const builtInAgents = [
     configSchema: {
       origin: { type: 'airport', label: 'Origin airport or city', required: true, placeholder: 'Dallas (DAL)' },
       destination: { type: 'airport', label: 'Destination airport or city', required: true, placeholder: 'New York (JFK)' },
+      tripType: { type: 'select', label: 'Trip type', required: true, options: ['One way', 'Round trip'] },
       maxPrice: { type: 'number', label: 'Max price ($)', required: true, placeholder: '300' },
       departAfter: { type: 'date', label: 'Depart after', placeholder: '' },
-      returnBefore: { type: 'date', label: 'Return before', placeholder: '' },
+      returnBefore: { type: 'date', label: 'Return before', placeholder: '', showWhen: { field: 'tripType', value: 'Round trip' } },
     },
     schedule: '0 */2 * * *',
     authorId: null,

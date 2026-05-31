@@ -8,6 +8,7 @@ export interface AgentRunResult {
 interface FlightWatcherConfig {
   origin?: string
   destination?: string
+  tripType?: string
   maxPrice?: number | string
   departAfter?: string
   returnBefore?: string
@@ -56,8 +57,8 @@ export async function runFlightWatcher(config: Record<string, unknown>): Promise
   const destination = extractIata(String(c.destination || 'JFK'))
   const maxPrice = Number(c.maxPrice) || 300
   const departDate = c.departAfter || tomorrowIso()
-  const returnDate = c.returnBefore || null
-  const isRoundTrip = Boolean(returnDate)
+  const isRoundTrip = c.tripType === 'Round trip'
+  const returnDate = isRoundTrip ? (c.returnBefore || null) : null
 
   const apiKey = process.env.SERPAPI_KEY
   if (!apiKey) throw new Error('SERPAPI_KEY is not set')

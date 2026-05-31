@@ -450,14 +450,16 @@ export default function AgentsPage() {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
-                {fields.map(([key, field]) => (
-                  <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {field.label}{field.required ? ' *' : ''}
-                    </span>
-                    <ConfigField fieldKey={key} field={field} value={cloneConfig[key]} onChange={handleCloneChange} />
-                  </label>
-                ))}
+                {fields
+                  .filter(([, field]) => !field.showWhen || String(cloneConfig[field.showWhen.field] ?? '') === field.showWhen.value)
+                  .map(([key, field]) => (
+                    <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {field.label}{field.required ? ' *' : ''}
+                      </span>
+                      <ConfigField fieldKey={key} field={field} value={cloneConfig[key]} onChange={handleCloneChange} />
+                    </label>
+                  ))}
               </div>
 
               {cloneErrors.length > 0 && (
@@ -519,19 +521,21 @@ export default function AgentsPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
                 {fields.length === 0 ? (
                   <div style={{ color: 'var(--text-secondary)' }}>No editable fields are available for this agent.</div>
-                ) : fields.map(([key, field]) => (
-                  <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {field.label}{field.required ? ' *' : ''}
-                    </span>
-                    <ConfigField
-                      fieldKey={key}
-                      field={field}
-                      value={editConfig[key]}
-                      onChange={handleEditChange}
-                    />
-                  </label>
-                ))}
+                ) : fields
+                  .filter(([, field]) => !field.showWhen || String(editConfig[field.showWhen.field] ?? '') === field.showWhen.value)
+                  .map(([key, field]) => (
+                    <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {field.label}{field.required ? ' *' : ''}
+                      </span>
+                      <ConfigField
+                        fieldKey={key}
+                        field={field}
+                        value={editConfig[key]}
+                        onChange={handleEditChange}
+                      />
+                    </label>
+                  ))}
               </div>
 
               {editErrors.length > 0 && (
