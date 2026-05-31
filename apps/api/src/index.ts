@@ -1,3 +1,5 @@
+import dns from 'dns'
+dns.setDefaultResultOrder('ipv4first')
 import { config } from 'dotenv'
 config({ path: '.env.local' })
 import express from 'express'
