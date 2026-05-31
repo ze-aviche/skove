@@ -97,6 +97,39 @@ export default defineAgent({
 })
 ```
 
+## Deployment
+
+### API — Railway
+
+The API is deployed on Railway from the repo root. Key configuration:
+
+- **Config file:** `railway.json` at the repo root — Railway must be pointed at `/railway.json` via Settings → Config-as-code
+- **Build command:** `pnpm install --prod=false && pnpm --filter api build` — `--prod=false` is required because Railway sets `NODE_ENV=production` during build, which skips devDependencies (including `tsc`) otherwise
+- **Start command:** `node --dns-result-order=ipv4first apps/api/dist/index.js`
+- **Watch path:** `/apps/api/**`
+
+#### Environment variables
+
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | Supabase **shared pooler** connection string (see below) |
+| `CLERK_SECRET_KEY` | Clerk backend secret |
+| `RESEND_API_KEY` | Resend email API key |
+| `NEXT_PUBLIC_APP_URL` | Frontend URL for CORS |
+
+#### Supabase connection
+
+Supabase's direct connection and dedicated pooler are IPv6-only on the free plan. Railway cannot route IPv6. Use the **shared pooler**:
+
+1. Supabase Dashboard → Settings → Database → Connection string
+2. Select **"Supabase Pooler"** (not "Dedicated Pooler")
+3. Copy the **Transaction mode** URL — port `6543`, username format `postgres.[project-ref]`
+4. Set this as `DATABASE_URL` in Railway
+
+### Web — Vercel
+
+Deploy the `apps/web` directory to Vercel with `NEXT_PUBLIC_API_URL` set to the Railway API URL.
+
 ## Contributing
 
 Skove is open to agent contributions. To submit an agent:
