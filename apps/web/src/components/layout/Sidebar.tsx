@@ -1,20 +1,42 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { UserButton } from '@clerk/nextjs'
+import { useEffect, useState } from 'react'
+import { UserButton, useAuth } from '@clerk/nextjs'
 import { useTheme } from '@/app/providers'
+import { getResults } from '@/lib/api'
 
 const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: '▦' },
   { label: 'My agents', href: '/dashboard/agents', icon: '⬡' },
   { label: 'Results', href: '/dashboard/results', icon: '◈' },
-  { label: 'Alerts', href: '/dashboard/alerts', icon: '◎', badge: 3 },
+  { label: 'Alerts', href: '/dashboard/alerts', icon: '◎' },
   { label: 'Agent store', href: '/dashboard/store', icon: '⊞' },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
   const { theme, toggleTheme } = useTheme()
+  const { getToken } = useAuth()
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  const fetchUnread = async () => {
+    try {
+      const token = await getToken()
+      const results = await getResults(token)
+      setUnreadCount(results.filter((r) => !r.isRead).length)
+    } catch { /* non-fatal */ }
+  }
+
+  useEffect(() => {
+    fetchUnread()
+  }, [pathname])
+
+  useEffect(() => {
+    const handler = () => fetchUnread()
+    window.addEventListener('results:changed', handler)
+    return () => window.removeEventListener('results:changed', handler)
+  }, [])
 
   return (
     <aside style={{
@@ -83,17 +105,17 @@ export default function Sidebar() {
             }}>
               <span style={{ fontSize: 15, opacity: active ? 1 : 0.6 }}>{item.icon}</span>
               {item.label}
-              {item.badge && (
+              {item.label === 'Alerts' && unreadCount > 0 && (
                 <span style={{
                   marginLeft: 'auto',
                   fontSize: 10,
                   fontWeight: 600,
-                  background: 'var(--amber-dim)',
-                  color: 'var(--amber)',
+                  background: 'var(--warning-dim)',
+                  color: 'var(--warning)',
                   padding: '1px 6px',
                   borderRadius: 99,
                   border: '1px solid rgba(245,158,11,0.2)',
-                }}>{item.badge}</span>
+                }}>{unreadCount}</span>
               )}
               {active && (
                 <span style={{

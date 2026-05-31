@@ -64,6 +64,7 @@ export default function AlertsPage() {
       const token = await auth.getToken()
       const updated = await markResultRead(id, token)
       setAlerts((prev) => prev.map((alert) => alert.id === id ? updated : alert))
+      window.dispatchEvent(new CustomEvent('results:changed'))
       showToast({ message: 'Alert marked read', variant: 'success' })
     } catch (err) {
       showToast({ message: err instanceof Error ? err.message : 'Failed to mark alert read', variant: 'error' })
