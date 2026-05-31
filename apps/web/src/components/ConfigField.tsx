@@ -1,6 +1,7 @@
 'use client'
 
 import AirportPicker from './AirportPicker'
+import DatePicker from './DatePicker'
 import { AgentConfigField } from '@/lib/api'
 
 const inputStyle = {
@@ -63,12 +64,10 @@ export default function ConfigField({ fieldKey, field, value, onChange }: Props)
 
   if (field.type === 'date') {
     return (
-      <input
-        type="date"
+      <DatePicker
         value={String(value ?? '')}
+        onChange={(v) => onChange(fieldKey, v)}
         min={new Date().toISOString().split('T')[0]}
-        onChange={(e) => onChange(fieldKey, e.target.value)}
-        style={{ ...inputStyle, colorScheme: 'dark' }}
       />
     )
   }
