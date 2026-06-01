@@ -96,7 +96,7 @@ export default function SignUpPage() {
           {/* Social login buttons appear here automatically when enabled in Clerk dashboard
               Supported: Google, GitHub, X (Twitter), Facebook, Instagram, LinkedIn */}
           <SignUp
-            afterSignUpUrl="/dashboard"
+            afterSignUpUrl="/dashboard" afterSignInUrl="/dashboard"
             appearance={clerkLight}
           />
         </div>

@@ -42,7 +42,7 @@ export default function SignInPage() {
         </div>
 
         <SignIn
-          afterSignInUrl="/dashboard"
+          afterSignInUrl="/dashboard" afterSignUpUrl="/dashboard"
           appearance={clerkLight}
         />
       </div>
