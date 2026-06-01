@@ -88,8 +88,21 @@ export async function runJobApplicationTracker(
   for (const job of jobs) {
     const salary = formatSalary(job.salary_min, job.salary_max)
 
+    const baseResult: AgentRunResult = {
+      title: `${job.title} @ ${job.company.display_name}`,
+      value: salary,
+      url: job.redirect_url,
+      metadata: {
+        company: job.company.display_name,
+        jobTitle: job.title,
+        location: job.location.display_name,
+        salary,
+        postedLabel: postedLabel(job.created),
+        agentType: 'job-application-tracker',
+      },
+    }
+
     if (resumeText) {
-      // AI scoring — only alert on strong matches
       try {
         const match = await scoreJobMatch(resumeText, {
           title: job.title,
@@ -101,40 +114,21 @@ export async function runJobApplicationTracker(
 
         if (match.score >= matchThreshold) {
           results.push({
-            title: `${job.title} @ ${job.company.display_name}`,
-            value: salary,
-            url: job.redirect_url,
+            ...baseResult,
             metadata: {
-              company: job.company.display_name,
-              jobTitle: job.title,
-              location: job.location.display_name,
-              salary,
-              postedLabel: postedLabel(job.created),
+              ...baseResult.metadata,
               matchScore: match.score,
               matchReasoning: match.reasoning,
               coverLetter: match.coverLetter,
-              agentType: 'job-application-tracker',
             },
           })
         }
       } catch (err) {
         console.error(`[job-tracker] Claude scoring failed for ${job.id}:`, err)
+        results.push(baseResult) // fall back to unscored result
       }
     } else {
-      // No resume — return all results without AI scoring
-      results.push({
-        title: `${job.title} @ ${job.company.display_name}`,
-        value: salary,
-        url: job.redirect_url,
-        metadata: {
-          company: job.company.display_name,
-          jobTitle: job.title,
-          location: job.location.display_name,
-          salary,
-          postedLabel: postedLabel(job.created),
-          agentType: 'job-application-tracker',
-        },
-      })
+      results.push(baseResult)
     }
   }
 
