@@ -3,7 +3,7 @@ import { requireAuth } from '../lib/auth'
 import { db } from '../db'
 import { users } from '../db/schema'
 import { eq } from 'drizzle-orm'
-import { stripe, PLANS } from '../lib/stripe'
+import { getStripe, PLANS } from '../lib/stripe'
 import { log } from '../lib/logger'
 
 export const billingRouter = Router()
@@ -38,14 +38,14 @@ billingRouter.post('/checkout', requireAuth, async (req, res) => {
     // Reuse existing customer or create new
     let customerId = user.stripeCustomerId ?? undefined
     if (!customerId) {
-      const customer = await stripe.customers.create({ email: user.email, metadata: { userId: user.id } })
+      const customer = await getStripe().customers.create({ email: user.email, metadata: { userId: user.id } })
       customerId = customer.id
       await db.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, user.id))
     }
 
     const TRIAL_DAYS = Number(process.env.TRIAL_PERIOD_DAYS ?? 14)
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
@@ -69,7 +69,7 @@ billingRouter.post('/portal', requireAuth, async (req, res) => {
     const [user] = await db.select().from(users).where(eq(users.id, req.userId!))
     if (!user?.stripeCustomerId) return res.status(400).json({ error: 'No billing account found' })
 
-    const session = await stripe.billingPortal.sessions.create({
+    const session = await getStripe().billingPortal.sessions.create({
       customer: user.stripeCustomerId,
       return_url: `${APP_URL}/dashboard/profile`,
     })

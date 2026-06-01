@@ -3,7 +3,7 @@ import { db } from '../db'
 import { users } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { log } from '../lib/logger'
-import { stripe } from '../lib/stripe'
+import { getStripe, Stripe } from '../lib/stripe'
 
 export const webhooksRouter = Router()
 
@@ -19,7 +19,7 @@ webhooksRouter.post('/stripe', async (req: Request, res: Response) => {
 
   let event
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig as string, secret)
+    event = getStripe().webhooks.constructEvent(req.body, sig as string, secret)
   } catch (err) {
     log.error('webhook', 'stripe signature verification failed', err)
     return res.status(400).json({ error: 'Invalid signature' })
