@@ -488,6 +488,43 @@ export default function AgentsPage() {
                   ))}
               </div>
 
+              {/* Resume section — job tracker only */}
+              {cloningAgent.agentId === 'job-application-tracker' && (
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Resume</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Used to score jobs and generate cover letters. PDF only.</div>
+                    </div>
+                    {hasResume && (
+                      <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'var(--success-dim)', color: 'var(--success)', border: '1px solid rgba(16,185,129,0.2)' }}>Uploaded</span>
+                    )}
+                  </div>
+                  {hasResume ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ flex: 1, background: 'var(--surface-3)', border: '1px solid var(--border)', borderRadius: 9, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span>📄</span>
+                        <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>Resume on file · {resumeWordCount.toLocaleString()} words</span>
+                      </div>
+                      <button onClick={() => resumeFileRef.current?.click()} disabled={resumeUploading} style={{ fontSize: 12, padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-3)', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0 }}>
+                        {resumeUploading ? 'Uploading…' : 'Replace'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => resumeFileRef.current?.click()}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleResumeFile(f) }}
+                      style={{ border: '2px dashed var(--border)', borderRadius: 10, padding: '20px', textAlign: 'center', cursor: 'pointer' }}
+                    >
+                      <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                        {resumeUploading ? 'Uploading…' : '📄 Drop resume here or click to upload'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {cloneErrors.length > 0 && (
                 <div style={{ color: 'var(--error)', fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {cloneErrors.map((e) => <span key={e}>{e}</span>)}
