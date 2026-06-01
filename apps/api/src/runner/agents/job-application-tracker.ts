@@ -13,22 +13,18 @@ interface JobTrackerConfig {
   matchThreshold?: number | string
 }
 
-interface AdzunaJob {
+// Normalised job shape from any source
+interface NormalisedJob {
   id: string
   title: string
-  company: { display_name: string }
-  location: { display_name: string }
-  redirect_url: string
-  salary_min?: number
-  salary_max?: number
+  company: string
+  location: string
+  applyUrl: string
+  salaryMin?: number
+  salaryMax?: number
   description?: string
-  created: string
-  contract_time?: string
-}
-
-interface AdzunaResponse {
-  results: AdzunaJob[]
-  exception?: string
+  postedAt: string
+  source: string
 }
 
 function formatSalary(min?: number, max?: number): string | undefined {
@@ -47,6 +43,102 @@ function postedLabel(iso: string): string {
   return `${Math.floor(days / 7)} weeks ago`
 }
 
+// ── Source 1: Adzuna ─────────────────────────────────────────────────────────
+
+async function fetchAdzuna(what: string, where: string, minSalary: number): Promise<NormalisedJob[]> {
+  const appId = process.env.ADZUNA_APP_ID
+  const appKey = process.env.ADZUNA_APP_KEY
+  if (!appId || !appKey) return []
+
+  const url = new URL('https://api.adzuna.com/v1/api/jobs/us/search/1')
+  url.searchParams.set('app_id', appId)
+  url.searchParams.set('app_key', appKey)
+  url.searchParams.set('what', what)
+  url.searchParams.set('where', where)
+  url.searchParams.set('results_per_page', '10')
+  url.searchParams.set('sort_by', 'date')
+  if (minSalary > 0) url.searchParams.set('salary_min', String(minSalary))
+
+  const res = await fetch(url.toString())
+  if (!res.ok) { console.warn(`[job-tracker] Adzuna ${res.status}`); return [] }
+  const data = await res.json() as { results?: { id: string; title: string; company: { display_name: string }; location: { display_name: string }; redirect_url: string; salary_min?: number; salary_max?: number; description?: string; created: string }[]; exception?: string }
+  if (data.exception) { console.warn(`[job-tracker] Adzuna error: ${data.exception}`); return [] }
+
+  return (data.results ?? []).map(j => ({
+    id: `adzuna-${j.id}`,
+    title: j.title,
+    company: j.company.display_name,
+    location: j.location.display_name,
+    applyUrl: j.redirect_url,
+    salaryMin: j.salary_min,
+    salaryMax: j.salary_max,
+    description: j.description,
+    postedAt: j.created,
+    source: 'Adzuna',
+  }))
+}
+
+// ── Source 2: JSearch (LinkedIn + Indeed + Glassdoor) ────────────────────────
+
+async function fetchJSearch(query: string): Promise<NormalisedJob[]> {
+  const apiKey = process.env.RAPIDAPI_KEY
+  if (!apiKey) return []
+
+  const url = new URL('https://jsearch.p.rapidapi.com/search')
+  url.searchParams.set('query', query)
+  url.searchParams.set('page', '1')
+  url.searchParams.set('num_pages', '1')
+  url.searchParams.set('date_posted', 'week')
+
+  const res = await fetch(url.toString(), {
+    headers: { 'X-RapidAPI-Key': apiKey, 'X-RapidAPI-Host': 'jsearch.p.rapidapi.com' },
+  })
+  if (!res.ok) { console.warn(`[job-tracker] JSearch ${res.status}`); return [] }
+  const data = await res.json() as { data?: { job_id: string; job_title: string; employer_name: string; job_city: string; job_state: string; job_is_remote: boolean; job_apply_link: string; job_min_salary: number | null; job_max_salary: number | null; job_posted_at_datetime_utc: string; job_description?: string }[] }
+
+  return (data.data ?? []).map(j => ({
+    id: `jsearch-${j.job_id}`,
+    title: j.job_title,
+    company: j.employer_name,
+    location: j.job_is_remote ? 'Remote' : [j.job_city, j.job_state].filter(Boolean).join(', '),
+    applyUrl: j.job_apply_link,
+    salaryMin: j.job_min_salary ?? undefined,
+    salaryMax: j.job_max_salary ?? undefined,
+    postedAt: j.job_posted_at_datetime_utc,
+    description: j.job_description,
+    source: 'LinkedIn/Indeed',
+  }))
+}
+
+// ── Source 3: RemoteOK (free, no key needed) ─────────────────────────────────
+
+async function fetchRemoteOK(jobTitle: string): Promise<NormalisedJob[]> {
+  const tag = jobTitle.toLowerCase().replace(/\s+/g, '-')
+  const res = await fetch(`https://remoteok.com/api?tag=${encodeURIComponent(tag)}`, {
+    headers: { 'User-Agent': 'skove-agent/1.0' },
+  })
+  if (!res.ok) return []
+  const data = await res.json() as { slug?: string; position?: string; company?: string; location?: string; url?: string; salary_min?: number; salary_max?: number; date?: string; description?: string }[]
+
+  return data
+    .filter(j => j.position)
+    .slice(0, 5)
+    .map(j => ({
+      id: `remoteok-${j.slug ?? Math.random()}`,
+      title: j.position!,
+      company: j.company ?? 'Unknown',
+      location: j.location ?? 'Remote',
+      applyUrl: j.url ?? `https://remoteok.com`,
+      salaryMin: j.salary_min,
+      salaryMax: j.salary_max,
+      postedAt: j.date ?? new Date().toISOString(),
+      description: j.description,
+      source: 'RemoteOK',
+    }))
+}
+
+// ── Main runner ───────────────────────────────────────────────────────────────
+
 export async function runJobApplicationTracker(
   config: Record<string, unknown>,
   ctx: RunnerContext
@@ -58,47 +150,45 @@ export async function runJobApplicationTracker(
   const keywords = c.keywords ? String(c.keywords) : ''
   const matchThreshold = Number(c.matchThreshold) || 7
 
-  const appId = process.env.ADZUNA_APP_ID
-  const appKey = process.env.ADZUNA_APP_KEY
-  if (!appId || !appKey) throw new Error('ADZUNA_APP_ID and ADZUNA_APP_KEY are not set')
-
-  // Fetch user's resume
+  // Fetch user resume
   const [user] = await db.select({ resumeText: users.resumeText }).from(users).where(eq(users.id, ctx.userId))
   const resumeText = user?.resumeText ?? null
 
-  // Fetch jobs from Adzuna
   const isRemote = location.toLowerCase().includes('remote')
-  const url = new URL('https://api.adzuna.com/v1/api/jobs/us/search/1')
-  url.searchParams.set('app_id', appId)
-  url.searchParams.set('app_key', appKey)
-  url.searchParams.set('what', [jobTitle, keywords].filter(Boolean).join(' '))
-  url.searchParams.set('where', isRemote ? 'remote' : location)
-  url.searchParams.set('results_per_page', '10')
-  url.searchParams.set('sort_by', 'date')
-  if (minSalary > 0) url.searchParams.set('salary_min', String(minSalary))
+  const what = [jobTitle, keywords].filter(Boolean).join(' ')
+  const where = isRemote ? 'remote' : location
 
-  const res = await fetch(url.toString())
-  if (!res.ok) throw new Error(`Adzuna API error: ${res.status}`)
-  const data = await res.json() as AdzunaResponse
-  if (data.exception) throw new Error(`Adzuna: ${data.exception}`)
+  // Fallback chain: Adzuna → JSearch → RemoteOK
+  let jobs: NormalisedJob[] = await fetchAdzuna(what, where, minSalary)
+  console.log(`[job-tracker] Adzuna: ${jobs.length} jobs`)
 
-  const jobs = data.results.slice(0, 8)
-  console.log(`[job-tracker] ${jobs.length} jobs from Adzuna, hasResume=${Boolean(resumeText)}, threshold=${matchThreshold}`)
+  if (jobs.length === 0) {
+    jobs = await fetchJSearch(`${jobTitle} ${isRemote ? 'remote' : location}`)
+    console.log(`[job-tracker] JSearch fallback: ${jobs.length} jobs`)
+  }
+
+  if (jobs.length === 0 && isRemote) {
+    jobs = await fetchRemoteOK(jobTitle)
+    console.log(`[job-tracker] RemoteOK fallback: ${jobs.length} jobs`)
+  }
+
+  console.log(`[job-tracker] Total: ${jobs.length} jobs, hasResume=${Boolean(resumeText)}, threshold=${matchThreshold}`)
+
   const results: AgentRunResult[] = []
 
-  for (const job of jobs) {
-    const salary = formatSalary(job.salary_min, job.salary_max)
-
+  for (const job of jobs.slice(0, 8)) {
+    const salary = formatSalary(job.salaryMin, job.salaryMax)
     const baseResult: AgentRunResult = {
-      title: `${job.title} @ ${job.company.display_name}`,
+      title: `${job.title} @ ${job.company}`,
       value: salary,
-      url: job.redirect_url,
+      url: job.applyUrl,
       metadata: {
-        company: job.company.display_name,
+        company: job.company,
         jobTitle: job.title,
-        location: job.location.display_name,
+        location: job.location,
         salary,
-        postedLabel: postedLabel(job.created),
+        postedLabel: postedLabel(job.postedAt),
+        source: job.source,
         agentType: 'job-application-tracker',
       },
     }
@@ -107,27 +197,22 @@ export async function runJobApplicationTracker(
       try {
         const match = await scoreJobMatch(resumeText, {
           title: job.title,
-          company: job.company.display_name,
-          location: job.location.display_name,
+          company: job.company,
+          location: job.location,
           description: job.description,
           salary,
         })
+        console.log(`[job-tracker] ${job.title} @ ${job.company}: score=${match.score}`)
 
-        console.log(`[job-tracker] ${job.title} @ ${job.company.display_name}: score=${match.score}`)
         if (match.score >= matchThreshold) {
           results.push({
             ...baseResult,
-            metadata: {
-              ...baseResult.metadata,
-              matchScore: match.score,
-              matchReasoning: match.reasoning,
-              coverLetter: match.coverLetter,
-            },
+            metadata: { ...baseResult.metadata, matchScore: match.score, matchReasoning: match.reasoning, coverLetter: match.coverLetter },
           })
         }
       } catch (err) {
-        console.error(`[job-tracker] Claude scoring failed for ${job.id}:`, err)
-        results.push(baseResult) // fall back to unscored result
+        console.error(`[job-tracker] Claude failed for ${job.id}:`, err)
+        results.push(baseResult)
       }
     } else {
       results.push(baseResult)
