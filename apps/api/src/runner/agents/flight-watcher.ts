@@ -1,3 +1,5 @@
+import { log } from '../../lib/logger'
+
 export interface AgentRunResult {
   title: string
   value?: string
@@ -51,7 +53,7 @@ function formatDuration(minutes: number): string {
   return `${h}h ${m}m`
 }
 
-export async function runFlightWatcher(config: Record<string, unknown>, _ctx?: { userId: string }): Promise<AgentRunResult[]> {
+export async function runFlightWatcher(config: Record<string, unknown>, _ctx?: { userId: string; seenKeys: Set<string> }): Promise<AgentRunResult[]> {
   const c = config as FlightWatcherConfig
   const origin = extractIata(String(c.origin || 'DAL'))
   const destination = extractIata(String(c.destination || 'JFK'))
@@ -76,13 +78,17 @@ export async function runFlightWatcher(config: Record<string, unknown>, _ctx?: {
   if (isRoundTrip && returnDate) params.set('return_date', returnDate)
 
   const res = await fetch(`https://serpapi.com/search.json?${params}`)
-  if (!res.ok) throw new Error(`SerpApi error: ${res.status}`)
+  if (!res.ok) throw new Error(`SerpApi HTTP error: ${res.status}`)
 
   const data = await res.json() as SerpApiResponse
-  if (data.error) throw new Error(`SerpApi: ${data.error}`)
+  if (data.error) {
+    log.warn('flight-watcher', 'serpapi returned no results', { error: data.error, origin, destination, departDate, userId: _ctx?.userId })
+    return []
+  }
 
   const allFlights = [...(data.best_flights ?? []), ...(data.other_flights ?? [])]
-  console.log(`[flight-watcher] ${allFlights.length} flights found, maxPrice=$${maxPrice}, cheapest=$${Math.min(...allFlights.map(f => f.price)) || 'n/a'}`)
+  const cheapest = allFlights.length ? Math.min(...allFlights.map(f => f.price)) : null
+  log.info('flight-watcher', 'flights fetched', { total: allFlights.length, maxPrice, cheapest, userId: _ctx?.userId })
 
   return allFlights
     .filter((f) => f.price <= maxPrice)

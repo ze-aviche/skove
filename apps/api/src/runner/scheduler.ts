@@ -5,6 +5,7 @@ import { db } from '../db'
 import { agentInstances, agentDefinitions, agentResults, users } from '../db/schema'
 import { agentRunners } from './agents'
 import { sendAlertEmail, sendDailyDigest, DigestItem } from '../lib/email'
+import { log } from '../lib/logger'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const scheduledTasks = new Map<string, any>()
@@ -22,28 +23,28 @@ export async function startScheduler() {
 
   // Morning digest — every day at 8am
   cron.schedule('0 8 * * *', () => {
-    sendMorningDigest().catch((err) => console.error('[scheduler] Digest failed:', err))
+    sendMorningDigest().catch((err) => log.error('scheduler', 'morning digest failed', err))
   })
 
-  console.log(`[scheduler] Started — ${rows.length} active agents scheduled`)
+  log.info('scheduler', 'started', { activeAgents: rows.length })
 }
 
 export function scheduleInstance(instanceId: string, cronExpression: string) {
   if (scheduledTasks.has(instanceId)) return
 
   if (!cron.validate(cronExpression)) {
-    console.warn(`[scheduler] Invalid cron "${cronExpression}" for instance ${instanceId}`)
+    log.warn('scheduler', 'invalid cron expression', { instanceId, cronExpression })
     return
   }
 
   const task = cron.schedule(cronExpression, () => {
     runInstance(instanceId).catch((err) =>
-      console.error(`[scheduler] Run failed for ${instanceId}:`, err)
+      log.error('scheduler', 'run failed', err, { instanceId })
     )
   })
 
   scheduledTasks.set(instanceId, task)
-  console.log(`[scheduler] Scheduled ${instanceId} (${cronExpression})`)
+  log.info('scheduler', 'instance scheduled', { instanceId, cronExpression })
 }
 
 export function unscheduleInstance(instanceId: string) {
@@ -51,7 +52,7 @@ export function unscheduleInstance(instanceId: string) {
   if (task) {
     task.destroy()
     scheduledTasks.delete(instanceId)
-    console.log(`[scheduler] Unscheduled ${instanceId}`)
+    log.info('scheduler', 'instance unscheduled', { instanceId })
   }
 }
 
@@ -69,11 +70,21 @@ export async function runInstance(instanceId: string) {
 
   if (!runner) throw new Error(`No runner registered for agent "${definition.id}"`)
 
-  console.log(`[scheduler] Running ${definition.id} for user ${instance.userId}`)
+  // Fetch previously seen results before running so agents can skip already-known items
+  const existing = await db
+    .select({ url: agentResults.url, title: agentResults.title })
+    .from(agentResults)
+    .where(eq(agentResults.instanceId, instance.id))
 
-  const results = await runner(instance.config as Record<string, unknown>, { userId: instance.userId })
+  const seenKeys = new Set(existing.map(r => r.url ?? r.title))
+  log.info('scheduler', 'run started', { agentId: definition.id, userId: instance.userId, seenCount: seenKeys.size })
 
-  for (const result of results) {
+  const results = await runner(instance.config as Record<string, unknown>, { userId: instance.userId, seenKeys })
+
+  // Safety-net dedup in case an agent returns something it shouldn't have
+  const newResults = results.filter(r => !seenKeys.has(r.url ?? r.title))
+
+  for (const result of newResults) {
     await db.insert(agentResults).values({
       instanceId: instance.id,
       userId: instance.userId,
@@ -91,16 +102,16 @@ export async function runInstance(instanceId: string) {
     .set({ lastRunAt: new Date(), nextRunAt })
     .where(eq(agentInstances.id, instanceId))
 
-  console.log(`[scheduler] ${definition.id} produced ${results.length} result(s)`)
+  log.info('scheduler', 'run complete', { agentId: definition.id, userId: instance.userId, found: results.length, inserted: newResults.length })
 
-  if (results.length > 0) {
+  if (newResults.length > 0) {
     const email = await getUserEmail(instance.userId)
     if (email) {
-      await sendAlertEmail(email, definition.name, results)
+      await sendAlertEmail(email, definition.name, newResults)
     }
   }
 
-  return results
+  return newResults
 }
 
 async function sendMorningDigest() {
@@ -134,7 +145,7 @@ async function sendMorningDigest() {
     }
   }
 
-  console.log(`[scheduler] Morning digest sent to ${byUser.size} user(s)`)
+  log.info('scheduler', 'morning digest sent', { userCount: byUser.size })
 }
 
 async function getUserEmail(userId: string): Promise<string | null> {
@@ -154,7 +165,7 @@ async function getUserEmail(userId: string): Promise<string | null> {
     }
     return email
   } catch (err) {
-    console.warn(`[scheduler] Could not fetch email for ${userId}:`, err)
+    log.warn('scheduler', 'could not fetch user email', { userId, error: err instanceof Error ? err.message : String(err) })
     return null
   }
 }

@@ -3,6 +3,7 @@ import { db } from '../db'
 import { agentResults } from '../db/schema'
 import { eq, desc } from 'drizzle-orm'
 import { requireAuth } from '../lib/auth'
+import { log } from '../lib/logger'
 
 export const resultsRouter = Router()
 
@@ -15,7 +16,7 @@ resultsRouter.get('/', requireAuth, async (req, res) => {
       .limit(100)
     res.json(results)
   } catch (err) {
-    console.error('GET /api/results error:', err)
+    log.error('api', 'GET /api/results failed', err, { userId: req.userId })
     res.status(500).json({ error: 'Failed to fetch results' })
   }
 })
@@ -34,7 +35,7 @@ resultsRouter.patch('/:id/read', requireAuth, async (req, res) => {
       .returning()
     res.json(updated)
   } catch (err) {
-    console.error('PATCH /api/results/:id/read error:', err)
+    log.error('api', 'PATCH /api/results/:id/read failed', err, { resultId: req.params.id, userId: req.userId })
     res.status(500).json({ error: 'Failed to mark result as read' })
   }
 })

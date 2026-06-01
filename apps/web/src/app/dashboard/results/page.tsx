@@ -1,14 +1,46 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
 import { getResults, markResultRead, AgentResult } from '@/lib/api'
+
+type Tab = 'All' | 'Unread' | 'Flights' | 'Jobs' | 'Rentals' | 'Stocks' | 'News'
+
+const TABS: Tab[] = ['All', 'Unread', 'Flights', 'Jobs', 'Rentals', 'Stocks', 'News']
+
+function agentType(r: AgentResult): string {
+  return typeof r.metadata === 'object' && r.metadata !== null && 'agentType' in r.metadata
+    ? String((r.metadata as Record<string, unknown>).agentType).toLowerCase()
+    : ''
+}
+
+function urlLabel(r: AgentResult): string {
+  const t = agentType(r)
+  if (t.includes('flight')) return 'View flights'
+  if (t.includes('rental')) return 'View listing'
+  if (t.includes('stock')) return 'View stock'
+  if (t.includes('news') || t.includes('keyword')) return 'Read article'
+  return 'Open'
+}
+
+function matchesTab(r: AgentResult, tab: Tab): boolean {
+  if (tab === 'All') return true
+  if (tab === 'Unread') return !r.isRead
+  const t = agentType(r)
+  if (tab === 'Flights') return t.includes('flight')
+  if (tab === 'Jobs') return t.includes('job')
+  if (tab === 'Rentals') return t.includes('rental')
+  if (tab === 'Stocks') return t.includes('stock')
+  if (tab === 'News') return t.includes('news') || t.includes('keyword')
+  return false
+}
 
 export default function ResultsPage() {
   const [results, setResults] = useState<AgentResult[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<Tab>('All')
   const auth = useAuth()
   const { showToast } = useToast()
 
@@ -25,16 +57,49 @@ export default function ResultsPage() {
         setLoading(false)
       }
     }
-
     load()
   }, [])
 
+  const filtered = useMemo(() => results.filter(r => matchesTab(r, activeTab)), [results, activeTab])
+
+  const handleMarkAllRead = async () => {
+    const unread = filtered.filter(r => !r.isRead)
+    if (unread.length === 0) return
+    try {
+      const token = await auth.getToken()
+      await Promise.all(unread.map(r => markResultRead(r.id, token)))
+      setResults(prev => prev.map(r => unread.some(u => u.id === r.id) ? { ...r, isRead: true } : r))
+      showToast({ message: `${unread.length} result${unread.length !== 1 ? 's' : ''} marked read`, variant: 'success' })
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'Failed to mark all read', variant: 'error' })
+    }
+  }
+
+  const tabCounts = useMemo(() => {
+    const counts: Partial<Record<Tab, number>> = {}
+    for (const tab of TABS) {
+      const n = results.filter(r => matchesTab(r, tab)).length
+      if (tab !== 'All') counts[tab] = n
+    }
+    return counts
+  }, [results])
+
   return (
     <div style={{ padding: '32px 36px', animation: 'fadeIn 0.4s ease' }}>
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.03em', marginBottom: 4 }}>
-          Results
-        </h1>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>Results</h1>
+          {filtered.some(r => !r.isRead) && (
+            <button onClick={handleMarkAllRead} style={{
+              fontSize: 12, fontWeight: 500,
+              padding: '7px 14px', borderRadius: 9,
+              border: '1px solid var(--border)',
+              background: 'var(--surface-2)',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+            }}>Mark all as read</button>
+          )}
+        </div>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
           Everything your agents have found, in one place.
         </p>
@@ -49,84 +114,107 @@ export default function ResultsPage() {
       ) : (
         <>
           <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'var(--surface-2)', borderRadius: 10, padding: 4, width: 'fit-content', border: '1px solid var(--border)' }}>
-            {['All results', 'Unread', 'Flights', 'Jobs', 'Rentals'].map((tab, i) => (
-              <button key={tab} style={{
-                fontSize: 12, fontWeight: i === 0 ? 500 : 400,
-                padding: '5px 14px', borderRadius: 7,
-                border: 'none',
-                background: i === 0 ? 'var(--surface-4)' : 'transparent',
-                color: i === 0 ? 'var(--text-primary)' : 'var(--text-secondary)',
-                cursor: 'pointer',
-              }}>{tab}</button>
-            ))}
+            {TABS.map((tab) => {
+              const active = tab === activeTab
+              const count = tab === 'All' ? results.length : tabCounts[tab] ?? 0
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  style={{
+                    fontSize: 12, fontWeight: active ? 500 : 400,
+                    padding: '5px 14px', borderRadius: 7,
+                    border: 'none',
+                    background: active ? 'var(--surface-4)' : 'transparent',
+                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  {tab}
+                  {count > 0 && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 600,
+                      padding: '1px 6px', borderRadius: 99,
+                      background: active ? 'var(--brand-dim)' : 'var(--surface-3)',
+                      color: active ? 'var(--brand)' : 'var(--text-tertiary)',
+                      border: `1px solid ${active ? 'rgba(139,92,246,0.2)' : 'var(--border)'}`,
+                    }}>{count}</span>
+                  )}
+                </button>
+              )
+            })}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {results.map((r) => (
-              <div key={r.id} style={{
-                background: 'var(--surface-2)',
-                border: `1px solid ${r.isRead ? 'var(--border)' : 'var(--border-hover)'}`,
-                borderRadius: 12,
-                padding: '13px 16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 14,
-              }}>
-                <span style={{
-                  width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                  background: r.isRead ? 'var(--text-tertiary)' : 'var(--green)',
-                  boxShadow: r.isRead ? 'none' : '0 0 8px var(--green)',
-                }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: 13,
-                    fontWeight: r.isRead ? 400 : 500,
-                    color: r.isRead ? 'var(--text-secondary)' : 'var(--text-primary)',
-                    marginBottom: 2,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>
-                    {r.title}
+          {filtered.length === 0 ? (
+            <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>No results in this category.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {filtered.map((r) => (
+                <div key={r.id} style={{
+                  background: 'var(--surface-2)',
+                  border: `1px solid ${r.isRead ? 'var(--border)' : 'var(--border-hover)'}`,
+                  borderRadius: 12,
+                  padding: '13px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 14,
+                }}>
+                  <span style={{
+                    width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                    background: r.isRead ? 'var(--text-tertiary)' : 'var(--green)',
+                    boxShadow: r.isRead ? 'none' : '0 0 8px var(--green)',
+                  }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 13,
+                      fontWeight: r.isRead ? 400 : 500,
+                      color: r.isRead ? 'var(--text-secondary)' : 'var(--text-primary)',
+                      marginBottom: 2,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {r.title}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                      {r.value ? `${r.value} · ` : ''}
+                      {agentType(r) || 'Agent result'}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                    {r.value ? `${r.value} · ` : ''}
-                    {typeof r.metadata === 'object' && r.metadata !== null && 'agentType' in r.metadata ? String((r.metadata as any).agentType) : 'Agent result'}
-                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)', flexShrink: 0 }}>{new Date(r.createdAt).toLocaleString()}</span>
+                  {r.url && (
+                    <a href={r.url} target="_blank" rel="noreferrer" style={{
+                      fontSize: 11, fontWeight: 500,
+                      padding: '4px 12px', borderRadius: 7,
+                      border: '1px solid var(--brand)',
+                      background: 'var(--brand-dim)',
+                      color: 'var(--brand)',
+                      cursor: 'pointer', flexShrink: 0,
+                      textDecoration: 'none',
+                    }}>{urlLabel(r)}</a>
+                  )}
+                  {!r.isRead && (
+                    <button onClick={async () => {
+                      try {
+                        const token = await auth.getToken()
+                        const updated = await markResultRead(r.id, token)
+                        setResults((prev) => prev.map((p) => p.id === updated.id ? updated : p))
+                        showToast({ message: 'Marked result as read', variant: 'success' })
+                      } catch (err) {
+                        showToast({ message: err instanceof Error ? err.message : 'Failed to mark read', variant: 'error' })
+                      }
+                    }} style={{
+                      fontSize: 11, fontWeight: 500,
+                      padding: '4px 12px', borderRadius: 7,
+                      border: '1px solid var(--border)',
+                      background: 'var(--surface-3)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer', flexShrink: 0,
+                    }}>Mark read</button>
+                  )}
                 </div>
-                <span style={{ fontSize: 11, color: 'var(--text-tertiary)', flexShrink: 0 }}>{new Date(r.createdAt).toLocaleString()}</span>
-                {r.url && (
-                  <a href={r.url} target="_blank" rel="noreferrer" style={{
-                    fontSize: 11, fontWeight: 500,
-                    padding: '4px 12px', borderRadius: 7,
-                    border: '1px solid var(--brand)',
-                    background: 'var(--brand-dim)',
-                    color: 'var(--brand)',
-                    cursor: 'pointer', flexShrink: 0,
-                    textDecoration: 'none',
-                  }}>Open</a>
-                )}
-                {!r.isRead && (
-                  <button onClick={async () => {
-                    try {
-                      const token = await auth.getToken()
-                      const updated = await markResultRead(r.id, token)
-                      setResults((prev) => prev.map((p) => p.id === updated.id ? updated : p))
-                      showToast({ message: 'Marked result as read', variant: 'success' })
-                    } catch (err) {
-                      showToast({ message: err instanceof Error ? err.message : 'Failed to mark read', variant: 'error' })
-                    }
-                  }} style={{
-                    fontSize: 11, fontWeight: 500,
-                    padding: '4px 12px', borderRadius: 7,
-                    border: '1px solid var(--border)',
-                    background: 'var(--surface-3)',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer', flexShrink: 0,
-                    marginLeft: 8,
-                  }}>Mark read</button>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>

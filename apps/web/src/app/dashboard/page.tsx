@@ -69,12 +69,31 @@ export default function DashboardPage() {
   const activeAgents = agents.filter((agent) => agent.isActive).length
   const totalAgents = agents.length
   const unreadResults = results.filter((result) => !result.isRead).length
+  const lastRun = useMemo(() => {
+    const withTimes = agents.filter(a => a.lastRunAt)
+    if (withTimes.length === 0) return null
+    return withTimes.reduce((latest, a) => a.lastRunAt! > latest.lastRunAt! ? a : latest)
+  }, [agents])
+
+  const lastRunAt = lastRun?.lastRunAt ?? null
+
+  const lastRunLabel = useMemo(() => {
+    if (!lastRunAt) return 'Never'
+    const diff = Date.now() - new Date(lastRunAt).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 1) return 'Just now'
+    if (mins < 60) return `${mins}m ago`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24) return `${hrs}h ago`
+    return `${Math.floor(hrs / 24)}d ago`
+  }, [lastRunAt])
+
   const stats = useMemo(() => [
     { label: 'Active agents', value: String(activeAgents), delta: `${totalAgents} deployed`, color: 'var(--brand)' },
-    { label: 'New results', value: String(results.length), delta: `${unreadResults} unread`, color: 'var(--green)' },
-    { label: 'Alerts sent', value: '—', delta: 'Use a result rule', color: 'var(--amber)' },
-    { label: 'Hours saved', value: `${Math.floor(results.length * 0.5)}h`, delta: 'Estimated', color: 'var(--blue)' },
-  ], [activeAgents, results.length, totalAgents, unreadResults])
+    { label: 'Results found', value: String(results.length), delta: 'all time', color: 'var(--green)' },
+    { label: 'Unread', value: String(unreadResults), delta: unreadResults === 0 ? 'All caught up' : 'need review', color: 'var(--amber)' },
+    { label: 'Last run', value: lastRunLabel, delta: lastRun ? (definitions[lastRun.agentId]?.name ?? lastRun.agentId) : 'No runs yet', color: 'var(--blue)' },
+  ], [activeAgents, results.length, totalAgents, unreadResults, lastRunLabel, lastRun, definitions])
 
   const runningAgents = useMemo(() => agents.map((agent) => {
     const def = definitions[agent.agentId]

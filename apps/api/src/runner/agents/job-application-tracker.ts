@@ -4,6 +4,7 @@ import { scoreJobMatch } from '../../lib/claude'
 import { db } from '../../db'
 import { users } from '../../db/schema'
 import { eq } from 'drizzle-orm'
+import { log } from '../../lib/logger'
 
 interface JobTrackerConfig {
   jobTitle?: string
@@ -60,9 +61,9 @@ async function fetchAdzuna(what: string, where: string, minSalary: number): Prom
   if (minSalary > 0) url.searchParams.set('salary_min', String(minSalary))
 
   const res = await fetch(url.toString())
-  if (!res.ok) { console.warn(`[job-tracker] Adzuna ${res.status}`); return [] }
+  if (!res.ok) { log.warn('job-tracker', 'adzuna request failed', { status: res.status }); return [] }
   const data = await res.json() as { results?: { id: string; title: string; company: { display_name: string }; location: { display_name: string }; redirect_url: string; salary_min?: number; salary_max?: number; description?: string; created: string }[]; exception?: string }
-  if (data.exception) { console.warn(`[job-tracker] Adzuna error: ${data.exception}`); return [] }
+  if (data.exception) { log.warn('job-tracker', 'adzuna api error', { error: data.exception }); return [] }
 
   return (data.results ?? []).map(j => ({
     id: `adzuna-${j.id}`,
@@ -93,7 +94,7 @@ async function fetchJSearch(query: string): Promise<NormalisedJob[]> {
   const res = await fetch(url.toString(), {
     headers: { 'X-RapidAPI-Key': apiKey, 'X-RapidAPI-Host': 'jsearch.p.rapidapi.com' },
   })
-  if (!res.ok) { console.warn(`[job-tracker] JSearch ${res.status}`); return [] }
+  if (!res.ok) { log.warn('job-tracker', 'jsearch request failed', { status: res.status }); return [] }
   const data = await res.json() as { data?: { job_id: string; job_title: string; employer_name: string; job_city: string; job_state: string; job_is_remote: boolean; job_apply_link: string; job_min_salary: number | null; job_max_salary: number | null; job_posted_at_datetime_utc: string; job_description?: string }[] }
 
   return (data.data ?? []).map(j => ({
@@ -160,23 +161,30 @@ export async function runJobApplicationTracker(
 
   // Fallback chain: Adzuna → JSearch → RemoteOK
   let jobs: NormalisedJob[] = await fetchAdzuna(what, where, minSalary)
-  console.log(`[job-tracker] Adzuna: ${jobs.length} jobs`)
+  log.info('job-tracker', 'adzuna fetch complete', { count: jobs.length })
 
   if (jobs.length === 0) {
     jobs = await fetchJSearch(`${jobTitle} ${isRemote ? 'remote' : location}`)
-    console.log(`[job-tracker] JSearch fallback: ${jobs.length} jobs`)
+    log.info('job-tracker', 'jsearch fallback complete', { count: jobs.length })
   }
 
   if (jobs.length === 0 && isRemote) {
     jobs = await fetchRemoteOK(jobTitle)
-    console.log(`[job-tracker] RemoteOK fallback: ${jobs.length} jobs`)
+    log.info('job-tracker', 'remoteok fallback complete', { count: jobs.length })
   }
 
-  console.log(`[job-tracker] Total: ${jobs.length} jobs, hasResume=${Boolean(resumeText)}, threshold=${matchThreshold}`)
+  log.info('job-tracker', 'jobs fetched', { total: jobs.length, hasResume: Boolean(resumeText), threshold: matchThreshold, userId: ctx.userId })
 
   const results: AgentRunResult[] = []
 
   for (const job of jobs.slice(0, 8)) {
+    const jobKey = job.applyUrl ?? `${job.title} @ ${job.company}`
+
+    if (ctx.seenKeys.has(jobKey)) {
+      log.info('job-tracker', 'skipping seen job', { title: job.title, company: job.company, userId: ctx.userId })
+      continue
+    }
+
     const salary = formatSalary(job.salaryMin, job.salaryMax)
     const baseResult: AgentRunResult = {
       title: `${job.title} @ ${job.company}`,
@@ -194,6 +202,7 @@ export async function runJobApplicationTracker(
     }
 
     if (resumeText) {
+      log.info('job-tracker', 'scoring with claude', { title: job.title, company: job.company, userId: ctx.userId })
       try {
         const match = await scoreJobMatch(resumeText, {
           title: job.title,
@@ -202,7 +211,7 @@ export async function runJobApplicationTracker(
           description: job.description,
           salary,
         })
-        console.log(`[job-tracker] ${job.title} @ ${job.company}: score=${match.score}`)
+        log.info('job-tracker', 'claude score', { title: job.title, company: job.company, score: match.score, threshold: matchThreshold, userId: ctx.userId })
 
         if (match.score >= matchThreshold) {
           results.push({
@@ -211,7 +220,7 @@ export async function runJobApplicationTracker(
           })
         }
       } catch (err) {
-        console.error(`[job-tracker] Claude failed for ${job.id}:`, err)
+        log.error('job-tracker', 'claude scoring failed', err, { jobId: job.id, title: job.title, userId: ctx.userId })
         results.push(baseResult)
       }
     } else {

@@ -9,6 +9,7 @@ import { resultsRouter } from './routes/results'
 import { webhooksRouter } from './routes/webhooks'
 import { resumeRouter } from './routes/resume'
 import { startScheduler } from './runner/scheduler'
+import { log } from './lib/logger'
 
 const app = express()
 const PORT = process.env.PORT || process.env.API_PORT || 3001
@@ -33,6 +34,6 @@ app.use('/api/webhooks', webhooksRouter)
 app.use('/api/resume', resumeRouter)
 
 app.listen(PORT, () => {
-  console.log(`Skove API running on http://localhost:${PORT}`)
-  startScheduler().catch((err) => console.error('[scheduler] Failed to start:', err))
+  log.info('api', 'server started', { port: PORT })
+  startScheduler().catch((err) => log.error('scheduler', 'failed to start', err))
 })

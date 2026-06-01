@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { db } from '../db'
 import { users } from '../db/schema'
 import { eq } from 'drizzle-orm'
+import { log } from '../lib/logger'
 
 export const webhooksRouter = Router()
 
@@ -21,7 +22,7 @@ webhooksRouter.post('/clerk', async (req, res) => {
       await db.insert(users).values({ id: userId, email })
     }
 
-    console.log(`[webhook] Synced user ${userId} (${email})`)
+    log.info('webhook', 'user synced', { userId, email, event: type })
   }
 
   res.json({ received: true })

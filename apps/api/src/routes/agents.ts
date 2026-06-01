@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm'
 import { requireAuth } from '../lib/auth'
 import { z } from 'zod'
 import { scheduleInstance, unscheduleInstance, runInstance } from '../runner/scheduler'
+import { log } from '../lib/logger'
 
 export const agentsRouter = Router()
 
@@ -17,7 +18,7 @@ agentsRouter.get('/definitions', async (_, res) => {
     )
     res.json(agents)
   } catch (err) {
-    console.error('GET /api/agents/definitions error:', err)
+    log.error('api', 'GET /api/agents/definitions failed', err)
     res.status(500).json({ error: 'Failed to fetch agents' })
   }
 })
@@ -27,7 +28,7 @@ agentsRouter.get('/whoami', requireAuth, async (req, res) => {
   try {
     res.json({ userId: req.userId })
   } catch (err) {
-    console.error('GET /api/agents/whoami error:', err)
+    log.error('api', 'GET /api/agents/whoami failed', err)
     res.status(500).json({ error: 'Failed to resolve user' })
   }
 })
@@ -40,7 +41,7 @@ agentsRouter.get('/my', requireAuth, async (req, res) => {
     )
     res.json(instances)
   } catch (err) {
-    console.error('GET /api/agents/my error:', err)
+    log.error('api', 'GET /api/agents/my failed', err, { userId: req.userId })
     res.status(500).json({ error: 'Failed to fetch agent instances' })
   }
 })
@@ -81,7 +82,7 @@ agentsRouter.post('/deploy', requireAuth, async (req, res) => {
 
     res.json(instance)
   } catch (err) {
-    console.error('POST /api/agents/deploy error:', err)
+    log.error('api', 'POST /api/agents/deploy failed', err, { userId: req.userId })
     res.status(500).json({ error: 'Failed to deploy agent' })
   }
 })
@@ -110,7 +111,7 @@ agentsRouter.patch('/:id/toggle', requireAuth, async (req, res) => {
 
     res.json(updated)
   } catch (err) {
-    console.error('PATCH /api/agents/:id/toggle error:', err)
+    log.error('api', 'PATCH /api/agents/:id/toggle failed', err, { instanceId: req.params.id, userId: req.userId })
     res.status(500).json({ error: 'Failed to toggle agent' })
   }
 })
@@ -138,7 +139,7 @@ agentsRouter.patch('/:id/config', requireAuth, async (req, res) => {
       .returning()
     res.json(updated)
   } catch (err) {
-    console.error('PATCH /api/agents/:id/config error:', err)
+    log.error('api', 'PATCH /api/agents/:id/config failed', err, { instanceId: req.params.id, userId: req.userId })
     res.status(500).json({ error: 'Failed to update agent config' })
   }
 })
@@ -153,7 +154,7 @@ agentsRouter.post('/:id/run', requireAuth, async (req, res) => {
     const results = await runInstance(req.params.id)
     res.json({ ran: true, results })
   } catch (err) {
-    console.error('POST /api/agents/:id/run error:', err)
+    log.error('api', 'POST /api/agents/:id/run failed', err, { instanceId: req.params.id, userId: req.userId })
     res.status(500).json({ error: err instanceof Error ? err.message : 'Run failed' })
   }
 })
@@ -174,7 +175,7 @@ agentsRouter.delete('/:id', requireAuth, async (req, res) => {
 
     res.json({ id: req.params.id })
   } catch (err) {
-    console.error('DELETE /api/agents/:id error:', err)
+    log.error('api', 'DELETE /api/agents/:id failed', err, { instanceId: req.params.id, userId: req.userId })
     res.status(500).json({ error: 'Failed to delete agent' })
   }
 })

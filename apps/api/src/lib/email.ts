@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import { log } from './logger'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM = process.env.EMAIL_FROM || 'Skove <hello@skove.app>'
@@ -17,7 +18,7 @@ export interface AlertResult {
 
 export async function sendAlertEmail(to: string, agentName: string, results: AlertResult[]) {
   if (!isConfigured()) {
-    console.log(`[email] RESEND_API_KEY not set — skipping alert to ${to}`)
+    log.warn('email', 'resend not configured, skipping alert', { to })
     return
   }
 
@@ -55,10 +56,10 @@ export async function sendAlertEmail(to: string, agentName: string, results: Ale
 
   const { data, error } = await resend.emails.send({ from: FROM, to, subject, html })
   if (error) {
-    console.error(`[email] Alert failed (${to}):`, JSON.stringify(error))
+    log.error('email', 'alert send failed', error, { to })
     return
   }
-  console.log(`[email] Alert sent to ${to} — id: ${data?.id}`)
+  log.info('email', 'alert sent', { to, emailId: data?.id, resultCount: results.length })
 }
 
 export interface DigestItem {
@@ -70,7 +71,7 @@ export interface DigestItem {
 
 export async function sendDailyDigest(to: string, items: DigestItem[]) {
   if (!isConfigured()) {
-    console.log(`[email] RESEND_API_KEY not set — skipping digest to ${to}`)
+    log.warn('email', 'resend not configured, skipping digest', { to })
     return
   }
   if (items.length === 0) return
@@ -108,8 +109,8 @@ export async function sendDailyDigest(to: string, items: DigestItem[]) {
 
   const { data, error } = await resend.emails.send({ from: FROM, to, subject, html })
   if (error) {
-    console.error(`[email] Digest failed (${to}):`, JSON.stringify(error))
+    log.error('email', 'digest send failed', error, { to })
     return
   }
-  console.log(`[email] Digest sent to ${to} — id: ${data?.id}`)
+  log.info('email', 'digest sent', { to, emailId: data?.id, itemCount: items.length })
 }

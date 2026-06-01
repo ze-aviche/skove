@@ -4,6 +4,7 @@ import { requireAuth } from '../lib/auth'
 import { db } from '../db'
 import { users } from '../db/schema'
 import { eq } from 'drizzle-orm'
+import { log } from '../lib/logger'
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string; numpages: number }>
@@ -34,7 +35,7 @@ resumeRouter.post('/', requireAuth, upload.single('resume'), async (req: Request
 
     res.json({ success: true, wordCount: resumeText.split(/\s+/).length, pages: parsed.numpages })
   } catch (err) {
-    console.error('Resume upload error:', err)
+    log.error('api', 'resume upload failed', err, { userId: req.userId })
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to process resume' })
   }
 })
