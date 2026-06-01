@@ -96,7 +96,9 @@ export async function runFlightWatcher(config: Record<string, unknown>, _ctx?: {
       return {
         title: `${airline} · ${origin} → ${destination}`,
         value: `$${f.price}`,
-        url: `https://www.google.com/travel/flights?q=flights+from+${origin}+to+${destination}+on+${departDate}`,
+        url: isRoundTrip && returnDate
+          ? `https://www.kayak.com/flights/${origin}-${destination}/${departDate}/${returnDate}`
+          : `https://www.kayak.com/flights/${origin}-${destination}/${departDate}`,
         metadata: {
           airline,
           price: f.price,
