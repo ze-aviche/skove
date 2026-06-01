@@ -23,6 +23,7 @@
     "pdf-parse": "1",
     "postgres": "^3.4.3",
     "resend": "^2.1.0",
+    "stripe": "^22.2.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {

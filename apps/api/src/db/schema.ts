@@ -5,6 +5,10 @@ export const users = pgTable('users', {
   id: text('id').primaryKey(), // Clerk user ID
   email: text('email').notNull(),
   resumeText: text('resume_text'),
+  plan: text('plan').default('free').notNull(), // 'free' | 'pro'
+  stripeCustomerId: text('stripe_customer_id'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
+  planExpiresAt: timestamp('plan_expires_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 

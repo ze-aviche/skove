@@ -7,6 +7,7 @@ import { requireAuth } from '../lib/auth'
 import { z } from 'zod'
 import { scheduleInstance, unscheduleInstance, runInstance } from '../runner/scheduler'
 import { log } from '../lib/logger'
+import { PLANS } from '../lib/stripe'
 
 export const agentsRouter = Router()
 
@@ -67,6 +68,20 @@ agentsRouter.post('/deploy', requireAuth, async (req, res) => {
       } catch { /* non-fatal — proceed with fallback */ }
       await db.insert(users).values({ id: req.userId!, email })
     }
+
+    // Enforce plan agent limit
+    const plan = (existingUser[0]?.plan ?? 'free') as keyof typeof PLANS
+    const maxAgents = PLANS[plan]?.maxAgents ?? PLANS.free.maxAgents
+    if (maxAgents !== Infinity) {
+      const current = await db.select().from(agentInstances).where(eq(agentInstances.userId, req.userId!))
+      if (current.length >= maxAgents) {
+        return res.status(403).json({
+          error: `Free plan is limited to ${maxAgents} agent${maxAgents !== 1 ? 's' : ''}. Upgrade to Pro for unlimited agents.`,
+          code: 'PLAN_LIMIT_REACHED',
+        })
+      }
+    }
+
     const [instance] = await db.insert(agentInstances).values({
       userId: req.userId!,
       agentId: body.data.agentId,

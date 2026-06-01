@@ -8,6 +8,8 @@ import { agentsRouter } from './routes/agents'
 import { resultsRouter } from './routes/results'
 import { webhooksRouter } from './routes/webhooks'
 import { resumeRouter } from './routes/resume'
+import { billingRouter } from './routes/billing'
+import { adminRouter } from './routes/admin'
 import { startScheduler } from './runner/scheduler'
 import { log } from './lib/logger'
 
@@ -17,11 +19,14 @@ const PORT = process.env.PORT || process.env.API_PORT || 3001
 const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
 const allowedOrigins = [
   appUrl,
-  appUrl.replace('https://www.', 'https://'),   // bare domain
-  appUrl.replace('https://', 'https://www.'),    // www variant
+  appUrl.replace('https://www.', 'https://'),
+  appUrl.replace('https://', 'https://www.'),
   'http://localhost:3000',
 ].filter(Boolean) as string[]
 app.use(cors({ origin: allowedOrigins, credentials: true }))
+
+// Stripe webhook needs raw body — must come before express.json()
+app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }))
 app.use(express.json())
 
 // Health check
@@ -32,6 +37,8 @@ app.use('/api/agents', agentsRouter)
 app.use('/api/results', resultsRouter)
 app.use('/api/webhooks', webhooksRouter)
 app.use('/api/resume', resumeRouter)
+app.use('/api/billing', billingRouter)
+app.use('/api/admin', adminRouter)
 
 app.listen(PORT, () => {
   log.info('api', 'server started', { port: PORT })

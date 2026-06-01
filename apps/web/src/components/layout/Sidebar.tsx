@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { UserButton, useAuth } from '@clerk/nextjs'
 import { useTheme } from '@/app/providers'
-import { getResults } from '@/lib/api'
+import { getResults, getBillingPlan } from '@/lib/api'
 
 const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: '▦' },
@@ -20,6 +20,7 @@ export default function Sidebar() {
   const { theme, toggleTheme } = useTheme()
   const { getToken } = useAuth()
   const [unreadCount, setUnreadCount] = useState(0)
+  const [plan, setPlan] = useState<string>('free')
 
   const fetchUnread = async () => {
     try {
@@ -28,6 +29,17 @@ export default function Sidebar() {
       setUnreadCount(results.filter((r) => !r.isRead).length)
     } catch { /* non-fatal */ }
   }
+
+  useEffect(() => {
+    async function loadPlan() {
+      try {
+        const token = await getToken()
+        const billing = await getBillingPlan(token)
+        setPlan(billing.plan)
+      } catch { /* non-fatal */ }
+    }
+    loadPlan()
+  }, [])
 
   useEffect(() => {
     fetchUnread()
@@ -184,7 +196,7 @@ export default function Sidebar() {
           }} />
           <div>
             <div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500 }}>My account</div>
-            <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Free plan</div>
+            <div style={{ fontSize: 11, color: plan === 'pro' ? 'var(--blue)' : 'var(--text-tertiary)', textTransform: 'capitalize' }}>{plan} plan</div>
           </div>
         </div>
       </div>

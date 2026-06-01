@@ -121,6 +121,67 @@ export function runAgent(instanceId: string, token?: string): Promise<{ ran: boo
   })
 }
 
+// ── Billing ──────────────────────────────────────────────────────────────────
+
+export type UserPlan = { plan: string; stripeCustomerId: string | null; planExpiresAt: string | null }
+
+export function getBillingPlan(token?: string): Promise<UserPlan> {
+  return fetchJson('/api/billing/plan', token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
+}
+
+export function createCheckoutSession(token?: string): Promise<{ url: string }> {
+  return fetchJson('/api/billing/checkout', {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
+export function createBillingPortalSession(token?: string): Promise<{ url: string }> {
+  return fetchJson('/api/billing/portal', {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
+// ── Admin ────────────────────────────────────────────────────────────────────
+
+export type AdminUser = {
+  id: string
+  email: string
+  plan: string
+  agentCount: number
+  resultCount: number
+  createdAt: string
+  planExpiresAt: string | null
+}
+
+export type AdminStats = { totalUsers: number; totalAgents: number; totalResults: number; proUsers: number }
+
+export function getAdminStats(token?: string): Promise<AdminStats> {
+  return fetchJson('/api/admin/stats', token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
+}
+
+export function getAdminUsers(token?: string): Promise<AdminUser[]> {
+  return fetchJson('/api/admin/users', token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
+}
+
+export function adminChangePlan(userId: string, plan: string, token?: string): Promise<{ id: string; plan: string }> {
+  return fetchJson(`/api/admin/users/${userId}/plan`, {
+    method: 'PATCH',
+    body: JSON.stringify({ plan }),
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
+export function adminDeleteUser(userId: string, token?: string): Promise<{ id: string }> {
+  return fetchJson(`/api/admin/users/${userId}`, {
+    method: 'DELETE',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
+// ── Resume ───────────────────────────────────────────────────────────────────
+
 export function getResumeStatus(token?: string): Promise<{ hasResume: boolean; wordCount: number }> {
   return fetchJson('/api/resume', token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
 }
