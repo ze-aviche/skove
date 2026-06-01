@@ -13,8 +13,11 @@ import { startScheduler } from './runner/scheduler'
 const app = express()
 const PORT = process.env.PORT || process.env.API_PORT || 3001
 
+const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
 const allowedOrigins = [
-  process.env.NEXT_PUBLIC_APP_URL,
+  appUrl,
+  appUrl.replace('https://www.', 'https://'),   // bare domain
+  appUrl.replace('https://', 'https://www.'),    // www variant
   'http://localhost:3000',
 ].filter(Boolean) as string[]
 app.use(cors({ origin: allowedOrigins, credentials: true }))
