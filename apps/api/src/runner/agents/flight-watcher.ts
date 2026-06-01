@@ -82,6 +82,7 @@ export async function runFlightWatcher(config: Record<string, unknown>, _ctx?: {
   if (data.error) throw new Error(`SerpApi: ${data.error}`)
 
   const allFlights = [...(data.best_flights ?? []), ...(data.other_flights ?? [])]
+  console.log(`[flight-watcher] ${allFlights.length} flights found, maxPrice=$${maxPrice}, cheapest=$${Math.min(...allFlights.map(f => f.price)) || 'n/a'}`)
 
   return allFlights
     .filter((f) => f.price <= maxPrice)

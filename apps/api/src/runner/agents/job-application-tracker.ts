@@ -83,6 +83,7 @@ export async function runJobApplicationTracker(
   if (data.exception) throw new Error(`Adzuna: ${data.exception}`)
 
   const jobs = data.results.slice(0, 8)
+  console.log(`[job-tracker] ${jobs.length} jobs from Adzuna, hasResume=${Boolean(resumeText)}, threshold=${matchThreshold}`)
   const results: AgentRunResult[] = []
 
   for (const job of jobs) {
@@ -112,6 +113,7 @@ export async function runJobApplicationTracker(
           salary,
         })
 
+        console.log(`[job-tracker] ${job.title} @ ${job.company.display_name}: score=${match.score}`)
         if (match.score >= matchThreshold) {
           results.push({
             ...baseResult,
