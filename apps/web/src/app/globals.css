@@ -286,9 +286,65 @@
 }
 
 /* ─────────────────────────────────────────────────────── */
+/* Dashboard layout — responsive */
+/* ─────────────────────────────────────────────────────── */
+
+/* Desktop: sidebar visible, bottom nav hidden */
+.dashboard-main {
+  margin-left: var(--sidebar-width);
+  flex: 1;
+  min-height: 100vh;
+  background: var(--surface-0);
+}
+
+.bottom-nav {
+  display: none;
+}
+
+/* Mobile: sidebar hidden, bottom nav visible, main full width */
+@media (max-width: 768px) {
+  aside {
+    display: none !important;
+  }
+
+  .dashboard-main {
+    margin-left: 0;
+    padding-bottom: 68px;
+  }
+
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: var(--surface-1);
+    border-top: 1px solid var(--border);
+    z-index: 50;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Tighten dashboard page padding on small screens */
+  .dashboard-main > div {
+    padding: 20px 16px !important;
+  }
+
+  /* Stack stat cards to 2-col grid on mobile */
+  .dashboard-main [style*="repeat(4, 1fr)"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Stack agent/result panels to single column */
+  .dashboard-main [style*="1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────── */
 /* Auth pages */
 /* ─────────────────────────────────────────────────────── */
-@media (max-width: 768px) {
+@media (max-width: 860px) {
   .auth-left-panel {
     display: none !important;
   }

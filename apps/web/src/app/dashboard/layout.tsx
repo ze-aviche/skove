@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/layout/Sidebar'
+import BottomNav from '@/components/layout/BottomNav'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { userId } = auth()
@@ -9,14 +10,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar />
-      <main style={{
-        marginLeft: 'var(--sidebar-width)',
-        flex: 1,
-        minHeight: '100vh',
-        background: 'var(--surface-0)',
-      }}>
+      <main className="dashboard-main">
         {children}
       </main>
+      <BottomNav />
     </div>
   )
 }

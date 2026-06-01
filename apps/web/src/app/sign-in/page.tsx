@@ -1,64 +1,49 @@
 import { SignIn } from '@clerk/nextjs'
 import Link from 'next/link'
-
-const clerkAppearance = {
-  variables: {
-    colorBackground: '#1f1f27',
-    colorInputBackground: '#282832',
-    colorInputText: '#ffffff',
-    colorText: '#ffffff',
-    colorTextSecondary: '#a1a1b3',
-    colorPrimary: '#7c3aed',
-    colorDanger: '#ef4444',
-    colorSuccess: '#10b981',
-    borderRadius: '10px',
-    fontFamily: 'Inter, -apple-system, sans-serif',
-    fontSize: '14px',
-  },
-  elements: {
-    card: { background: '#1f1f27', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 20px 48px rgba(0,0,0,0.55)' },
-    headerTitle: { color: '#ffffff', fontSize: '20px', fontWeight: '600' },
-    headerSubtitle: { color: '#a1a1b3' },
-    formButtonPrimary: { background: '#7c3aed', '&:hover': { background: '#6d28d9' } },
-    footerActionLink: { color: '#7c3aed' },
-    identityPreviewText: { color: '#ffffff' },
-    formFieldLabel: { color: '#a1a1b3' },
-    dividerLine: { background: 'rgba(255,255,255,0.08)' },
-    dividerText: { color: '#6b6b7d' },
-    socialButtonsBlockButton: {
-      background: '#282832',
-      border: '1px solid rgba(255,255,255,0.08)',
-      color: '#ffffff',
-      '&:hover': { background: '#31313d' },
-    },
-    socialButtonsBlockButtonText: { color: '#ffffff' },
-  },
-}
+import { clerkLight } from '@/lib/auth-appearance'
 
 export default function SignInPage() {
   return (
     <div style={{
       minHeight: '100vh',
       display: 'flex',
+      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'var(--surface-0)',
-      fontFamily: 'Inter, -apple-system, sans-serif',
+      background: '#f8fafc',
+      fontFamily: "'Inter', -apple-system, sans-serif",
+      padding: '32px 16px',
     }}>
+      <Link href="/" style={{ textDecoration: 'none', marginBottom: 32 }}>
+        <span style={{ fontSize: 22, fontWeight: 700, color: '#111827', letterSpacing: '-0.04em' }}>
+          Skove
+        </span>
+      </Link>
+
       <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 24,
+        width: '100%',
+        maxWidth: 420,
+        background: '#ffffff',
+        border: '1px solid #e5e7eb',
+        borderRadius: 16,
+        padding: '36px 36px 28px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)',
       }}>
-        <Link href="/" style={{
-          fontSize: 22, fontWeight: 700, letterSpacing: '-0.05em',
-          color: '#ffffff', textDecoration: 'none',
-        }}>Skove</Link>
+        <div style={{ marginBottom: 24 }}>
+          <h2 style={{ fontSize: 22, fontWeight: 600, color: '#111827', letterSpacing: '-0.03em', marginBottom: 6 }}>
+            Welcome back
+          </h2>
+          <p style={{ fontSize: 14, color: '#6b7280' }}>
+            New to Skove?{' '}
+            <Link href="/sign-up" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}>
+              Create an account
+            </Link>
+          </p>
+        </div>
 
         <SignIn
           afterSignInUrl="/dashboard"
-          appearance={clerkAppearance}
+          appearance={clerkLight}
         />
       </div>
     </div>

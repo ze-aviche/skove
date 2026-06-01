@@ -1,45 +1,12 @@
 import { SignUp } from '@clerk/nextjs'
-
-const clerkAppearance = {
-  variables: {
-    colorBackground: '#1f1f27',
-    colorInputBackground: '#282832',
-    colorInputText: '#ffffff',
-    colorText: '#ffffff',
-    colorTextSecondary: '#a1a1b3',
-    colorPrimary: '#7c3aed',
-    colorDanger: '#ef4444',
-    colorSuccess: '#10b981',
-    borderRadius: '10px',
-    fontFamily: 'Inter, -apple-system, sans-serif',
-    fontSize: '14px',
-  },
-  elements: {
-    card: { background: '#1f1f27', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 20px 48px rgba(0,0,0,0.55)' },
-    headerTitle: { color: '#ffffff', fontSize: '20px', fontWeight: '600' },
-    headerSubtitle: { color: '#a1a1b3' },
-    formButtonPrimary: { background: '#7c3aed', '&:hover': { background: '#6d28d9' } },
-    footerActionLink: { color: '#7c3aed' },
-    identityPreviewText: { color: '#ffffff' },
-    formFieldLabel: { color: '#a1a1b3' },
-    dividerLine: { background: 'rgba(255,255,255,0.08)' },
-    dividerText: { color: '#6b6b7d' },
-    socialButtonsBlockButton: {
-      background: '#282832',
-      border: '1px solid rgba(255,255,255,0.08)',
-      color: '#ffffff',
-      '&:hover': { background: '#31313d' },
-    },
-    socialButtonsBlockButtonText: { color: '#ffffff' },
-  },
-}
+import Link from 'next/link'
+import { clerkLight } from '@/lib/auth-appearance'
 
 const features = [
-  { icon: '✈️', label: 'Track cheap flights' },
-  { icon: '💼', label: 'Find matching jobs' },
-  { icon: '🏠', label: 'Monitor rental listings' },
-  { icon: '📈', label: 'Watch stocks & prices' },
-  { icon: '📰', label: 'Follow keywords in news' },
+  { icon: '✈️', text: 'Track cheap flights and get alerted instantly' },
+  { icon: '💼', text: 'Find jobs that match your resume with AI scoring' },
+  { icon: '🏠', text: 'Monitor rental listings before they disappear' },
+  { icon: '📈', text: 'Watch stocks and prices around the clock' },
 ]
 
 export default function SignUpPage() {
@@ -47,71 +14,92 @@ export default function SignUpPage() {
     <div style={{
       minHeight: '100vh',
       display: 'flex',
-      background: 'var(--surface-0)',
-      fontFamily: 'Inter, -apple-system, sans-serif',
+      background: '#ffffff',
+      fontFamily: "'Inter', -apple-system, sans-serif",
     }}>
+
       {/* Left panel — branding */}
       <div style={{
-        flex: 1,
+        flex: '0 0 45%',
+        background: '#f8fafc',
+        borderRight: '1px solid #e5e7eb',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'center',
-        padding: '60px 64px',
-        borderRight: '1px solid rgba(255,255,255,0.06)',
-        background: 'linear-gradient(135deg, #0f0f12 0%, #16161b 100%)',
+        justifyContent: 'space-between',
+        padding: '48px 56px',
       }} className="auth-left-panel">
-        <div style={{ maxWidth: 400 }}>
-          <div style={{ marginBottom: 40 }}>
-            <span style={{
-              fontSize: 26, fontWeight: 700, letterSpacing: '-0.05em',
-              color: '#ffffff',
-            }}>Skove</span>
-          </div>
 
+        {/* Logo */}
+        <Link href="/" style={{ textDecoration: 'none' }}>
+          <span style={{ fontSize: 22, fontWeight: 700, color: '#111827', letterSpacing: '-0.04em' }}>
+            Skove
+          </span>
+        </Link>
+
+        {/* Hero copy */}
+        <div>
           <h1 style={{
-            fontSize: 32, fontWeight: 700, lineHeight: 1.2,
-            letterSpacing: '-0.04em', color: '#ffffff', marginBottom: 14,
+            fontSize: 36, fontWeight: 700, color: '#111827',
+            letterSpacing: '-0.04em', lineHeight: 1.15, marginBottom: 16,
           }}>
-            Agents working<br />for you, 24/7
+            Stop searching.<br />Start automating.
           </h1>
-          <p style={{ fontSize: 15, color: '#a1a1b3', lineHeight: 1.6, marginBottom: 36 }}>
-            Deploy autonomous agents that monitor, search, and act on your behalf. Results waiting when you wake up.
+          <p style={{ fontSize: 16, color: '#6b7280', lineHeight: 1.6, marginBottom: 40, maxWidth: 340 }}>
+            Deploy agents that monitor the web 24/7 and surface results when they matter.
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {features.map(f => (
-              <div key={f.label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div key={f.text} style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
                 <span style={{
-                  width: 34, height: 34,
-                  background: 'rgba(124,58,237,0.12)',
-                  border: '1px solid rgba(124,58,237,0.2)',
-                  borderRadius: 9,
+                  width: 36, height: 36, background: '#eff6ff',
+                  border: '1px solid #dbeafe', borderRadius: 9,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 16, flexShrink: 0,
+                  fontSize: 17, flexShrink: 0,
                 }}>{f.icon}</span>
-                <span style={{ fontSize: 14, color: '#e2e8f0' }}>{f.label}</span>
+                <span style={{ fontSize: 14, color: '#374151', lineHeight: 1.5, paddingTop: 8 }}>
+                  {f.text}
+                </span>
               </div>
             ))}
           </div>
         </div>
+
+        {/* Footer */}
+        <p style={{ fontSize: 12, color: '#9ca3af' }}>
+          Free to start · No credit card required
+        </p>
       </div>
 
-      {/* Right panel — Clerk form */}
+      {/* Right panel — form */}
       <div style={{
-        width: 480,
+        flex: 1,
         display: 'flex',
-        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '40px 32px',
-        flexShrink: 0,
+        padding: '48px 40px',
+        background: '#ffffff',
       }}>
-        {/* Social login note — enable in Clerk dashboard:
-            User & Authentication → Social Connections → X, Facebook, Instagram */}
-        <SignUp
-          afterSignUpUrl="/dashboard"
-          appearance={clerkAppearance}
-        />
+        <div style={{ width: '100%', maxWidth: 400 }}>
+          <div style={{ marginBottom: 28 }}>
+            <h2 style={{ fontSize: 24, fontWeight: 600, color: '#111827', letterSpacing: '-0.03em', marginBottom: 6 }}>
+              Create your account
+            </h2>
+            <p style={{ fontSize: 14, color: '#6b7280' }}>
+              Already have one?{' '}
+              <Link href="/sign-in" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}>
+                Sign in
+              </Link>
+            </p>
+          </div>
+
+          {/* Social login buttons appear here automatically when enabled in Clerk dashboard
+              Supported: Google, GitHub, X (Twitter), Facebook, Instagram, LinkedIn */}
+          <SignUp
+            afterSignUpUrl="/dashboard"
+            appearance={clerkLight}
+          />
+        </div>
       </div>
     </div>
   )
