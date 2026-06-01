@@ -72,19 +72,45 @@ export default function AlertsPage() {
     }
   }
 
+  const handleMarkAllRead = async () => {
+    const unreadAlerts = alerts.filter((a) => !a.isRead)
+    if (unreadAlerts.length === 0) return
+    try {
+      const token = await auth.getToken()
+      await Promise.all(unreadAlerts.map((a) => markResultRead(a.id, token)))
+      setAlerts((prev) => prev.map((a) => ({ ...a, isRead: true })))
+      window.dispatchEvent(new CustomEvent('results:changed'))
+      showToast({ message: `${unreadAlerts.length} alert${unreadAlerts.length !== 1 ? 's' : ''} marked read`, variant: 'success' })
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'Failed to mark all read', variant: 'error' })
+    }
+  }
+
   return (
     <div style={{ padding: '32px 36px', animation: 'fadeIn 0.4s ease' }}>
       <div style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>Alerts</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>Alerts</h1>
+            {unread > 0 && (
+              <span style={{
+                fontSize: 12, fontWeight: 600,
+                padding: '2px 10px', borderRadius: 99,
+                background: 'var(--warning-dim)',
+                color: 'var(--warning)',
+                border: '1px solid rgba(245,158,11,0.2)',
+              }}>{unread} unread</span>
+            )}
+          </div>
           {unread > 0 && (
-            <span style={{
-              fontSize: 12, fontWeight: 600,
-              padding: '2px 10px', borderRadius: 99,
-              background: 'var(--amber-dim)',
-              color: 'var(--amber)',
-              border: '1px solid rgba(245,158,11,0.2)',
-            }}>{unread} unread</span>
+            <button onClick={handleMarkAllRead} style={{
+              fontSize: 12, fontWeight: 500,
+              padding: '7px 14px', borderRadius: 9,
+              border: '1px solid var(--border)',
+              background: 'var(--surface-2)',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+            }}>Mark all as read</button>
           )}
         </div>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
