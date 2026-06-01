@@ -142,7 +142,7 @@ export default function ProfilePage() {
             borderRadius: 10, padding: '14px 16px',
           }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>
-              Upgrade to Pro
+              Start your 14-day free trial
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14 }}>
               {['Unlimited agents', 'Unlimited results', 'Priority runs', 'Email digest'].map(f => (
@@ -155,8 +155,11 @@ export default function ProfilePage() {
               fontSize: 13, fontWeight: 600, padding: '9px 20px', borderRadius: 9,
               border: 'none', background: '#2563eb', color: '#fff', cursor: 'pointer',
             }}>
-              {billingLoading ? 'Redirecting…' : 'Upgrade to Pro →'}
+              {billingLoading ? 'Redirecting…' : 'Try Pro free for 14 days →'}
             </button>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 8 }}>
+              No charge until trial ends. Cancel anytime.
+            </div>
           </div>
         )}
       </div>

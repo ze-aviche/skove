@@ -43,10 +43,13 @@ billingRouter.post('/checkout', requireAuth, async (req, res) => {
       await db.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, user.id))
     }
 
+    const TRIAL_DAYS = Number(process.env.TRIAL_PERIOD_DAYS ?? 14)
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
+      subscription_data: TRIAL_DAYS > 0 ? { trial_period_days: TRIAL_DAYS } : undefined,
       success_url: `${APP_URL}/dashboard/profile?upgraded=1`,
       cancel_url: `${APP_URL}/dashboard/profile`,
       metadata: { userId: user.id },
