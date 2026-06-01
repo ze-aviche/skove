@@ -10,8 +10,8 @@
   },
   "scripts": {
     "dev": "turbo run dev",
-    "build": "pnpm install --prod=false && pnpm --filter api build",
-    "start": "node --dns-result-order=ipv4first apps/api/dist/index.js",
+    "build": "pnpm install --prod=false && pnpm --filter web build",
+    "start": "pnpm --filter web start",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "db:migrate": "pnpm --filter api db:migrate",
