@@ -154,7 +154,7 @@ export default function AlertsPage() {
         <div style={{ color: 'var(--text-secondary)' }}>No alerts yet. Your agents will send notifications here as they find meaningful updates.</div>
       ) : (
         <>
-          <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'var(--surface-2)', borderRadius: 10, padding: 4, width: 'fit-content', border: '1px solid var(--border)' }}>
+          <div className="tab-bar" style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'var(--surface-2)', borderRadius: 10, padding: 4, width: 'fit-content', maxWidth: '100%', border: '1px solid var(--border)' }}>
             {TABS.map((tab) => {
               const active = tab === activeTab
               const count = tab === 'All' ? alerts.length : tabCounts[tab] ?? 0
@@ -179,7 +179,7 @@ export default function AlertsPage() {
                       padding: '1px 6px', borderRadius: 99,
                       background: active ? 'var(--brand-dim)' : 'var(--surface-3)',
                       color: active ? 'var(--brand)' : 'var(--text-tertiary)',
-                      border: `1px solid ${active ? 'rgba(139,92,246,0.2)' : 'var(--border)'}`,
+                      border: `1px solid ${active ? 'rgba(59,130,246,0.2)' : 'var(--border)'}`,
                     }}>{count}</span>
                   )}
                 </button>
@@ -227,7 +227,7 @@ export default function AlertsPage() {
                           padding: '2px 8px', borderRadius: 99,
                           background: Number(alert.metadata.matchScore) >= 8 ? 'var(--success-dim)' : 'var(--brand-dim)',
                           color: Number(alert.metadata.matchScore) >= 8 ? 'var(--success)' : 'var(--brand)',
-                          border: `1px solid ${Number(alert.metadata.matchScore) >= 8 ? 'rgba(16,185,129,0.2)' : 'rgba(124,58,237,0.2)'}`,
+                          border: `1px solid ${Number(alert.metadata.matchScore) >= 8 ? 'rgba(16,185,129,0.2)' : 'rgba(59,130,246,0.2)'}`,
                         }}>
                           AI Match {String(alert.metadata.matchScore)}/10
                         </span>

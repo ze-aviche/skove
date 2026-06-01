@@ -113,7 +113,7 @@ export default function ResultsPage() {
         <div style={{ color: 'var(--text-secondary)' }}>No results yet. Deploy an agent to get started.</div>
       ) : (
         <>
-          <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'var(--surface-2)', borderRadius: 10, padding: 4, width: 'fit-content', border: '1px solid var(--border)' }}>
+          <div className="tab-bar" style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'var(--surface-2)', borderRadius: 10, padding: 4, width: 'fit-content', maxWidth: '100%', border: '1px solid var(--border)' }}>
             {TABS.map((tab) => {
               const active = tab === activeTab
               const count = tab === 'All' ? results.length : tabCounts[tab] ?? 0
@@ -138,7 +138,7 @@ export default function ResultsPage() {
                       padding: '1px 6px', borderRadius: 99,
                       background: active ? 'var(--brand-dim)' : 'var(--surface-3)',
                       color: active ? 'var(--brand)' : 'var(--text-tertiary)',
-                      border: `1px solid ${active ? 'rgba(139,92,246,0.2)' : 'var(--border)'}`,
+                      border: `1px solid ${active ? 'rgba(59,130,246,0.2)' : 'var(--border)'}`,
                     }}>{count}</span>
                   )}
                 </button>

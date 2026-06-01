@@ -287,7 +287,7 @@ export default function AgentsPage() {
             borderRadius: 14,
             padding: '18px 20px',
           }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+            <div className="agent-card-inner" style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
               <div style={{
                 width: 44, height: 44,
                 background: a.colorDim,
@@ -304,9 +304,9 @@ export default function AgentsPage() {
                     <span style={{
                       fontSize: 10, fontWeight: 600,
                       padding: '2px 8px', borderRadius: 99,
-                      background: 'rgba(124,58,237,0.15)',
+                      background: 'rgba(59,130,246,0.15)',
                       color: 'var(--brand)',
-                      border: '1px solid rgba(124,58,237,0.3)',
+                      border: '1px solid rgba(59,130,246,0.3)',
                       display: 'flex', alignItems: 'center', gap: 4,
                     }}>
                       <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'var(--brand)', animation: 'pulse 1s infinite' }} />
@@ -359,7 +359,7 @@ export default function AgentsPage() {
               </div>
 
               {/* Actions */}
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div className="agent-actions">
                 <button disabled={runningIds.has(a.id)} onClick={async () => {
                   setRunningIds((prev) => new Set(prev).add(a.id))
                   try {
@@ -379,7 +379,7 @@ export default function AgentsPage() {
                   }
                 }} style={{
                   fontSize: 12, padding: '6px 14px', borderRadius: 8,
-                  border: '1px solid rgba(139,92,246,0.3)',
+                  border: '1px solid rgba(59,130,246,0.3)',
                   background: 'var(--brand-dim)',
                   color: runningIds.has(a.id) ? 'var(--text-tertiary)' : 'var(--brand)',
                   cursor: runningIds.has(a.id) ? 'not-allowed' : 'pointer',

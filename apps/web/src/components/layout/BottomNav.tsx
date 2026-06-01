@@ -8,7 +8,6 @@ import { getResults } from '@/lib/api'
 const navItems = [
   { label: 'Home',    href: '/dashboard',         icon: '▦' },
   { label: 'Agents',  href: '/dashboard/agents',  icon: '⬡' },
-  { label: 'Results', href: '/dashboard/results', icon: '◈' },
   { label: 'Alerts',  href: '/dashboard/alerts',  icon: '◎' },
   { label: 'Store',   href: '/dashboard/store',   icon: '⊞' },
   { label: 'Profile', href: '/dashboard/profile', icon: '◉' },

@@ -92,7 +92,7 @@ export default async function AgentStorePage() {
                     padding: '1px 7px', borderRadius: 99,
                     background: agent.status === 'official' ? 'var(--brand-dim)' : 'var(--surface-4)',
                     color: agent.status === 'official' ? 'var(--brand)' : 'var(--text-secondary)',
-                    border: `1px solid ${agent.status === 'official' ? 'rgba(139,92,246,0.2)' : 'var(--border)'}`,
+                    border: `1px solid ${agent.status === 'official' ? 'rgba(59,130,246,0.2)' : 'var(--border)'}`,
                   }}>{agent.status === 'official' ? '⬡ Official' : '◈ Community'}</span>
                   <span style={{
                     fontSize: 10,

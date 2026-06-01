@@ -116,10 +116,10 @@ export default function DashboardPage() {
     <div style={{ padding: '32px 36px', animation: 'fadeIn 0.4s ease' }}>
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.03em', marginBottom: 4 }}>
-          Good morning 👋
+          Overview
         </h1>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-          Your dashboard updates automatically with the latest agent activity.
+          Live summary of your agents and results.
         </p>
       </div>
 
@@ -129,7 +129,7 @@ export default function DashboardPage() {
         <div style={{ color: 'var(--red)' }}>{error}</div>
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
+          <div className="stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 28 }}>
             {stats.map((stat) => (
               <div key={stat.label} style={{
                 background: 'var(--surface-2)',
@@ -148,14 +148,14 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div className="two-col-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                 <h2 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>Running agents</h2>
                 <Link href="/dashboard/store" style={{
                   fontSize: 12, color: 'var(--brand)', textDecoration: 'none',
                   background: 'var(--brand-dim)', padding: '4px 10px', borderRadius: 6,
-                  border: '1px solid rgba(139,92,246,0.2)',
+                  border: '1px solid rgba(59,130,246,0.2)',
                 }}>+ Add agent</Link>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

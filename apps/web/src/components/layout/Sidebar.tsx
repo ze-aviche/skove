@@ -15,6 +15,8 @@ const navItems = [
   { label: 'Profile', href: '/dashboard/profile', icon: '◉' },
 ]
 
+const adminNavItem = { label: 'Admin', href: '/dashboard/admin', icon: '⚙' }
+
 export default function Sidebar() {
   const pathname = usePathname()
   const { theme, toggleTheme } = useTheme()
@@ -88,7 +90,7 @@ export default function Sidebar() {
           background: 'var(--brand-dim)',
           padding: '2px 7px',
           borderRadius: 99,
-          border: '1px solid rgba(139,92,246,0.2)',
+          border: '1px solid rgba(59,130,246,0.2)',
           fontWeight: 500,
         }}>beta</span>
       </div>
@@ -145,6 +147,27 @@ export default function Sidebar() {
           )
         })}
       </nav>
+
+      {/* Admin link — shown to all, API enforces 403 for non-admins */}
+      <div style={{ padding: '6px 10px', borderTop: '1px solid var(--border)' }}>
+        {(() => {
+          const active = pathname === adminNavItem.href
+          return (
+            <Link href={adminNavItem.href} style={{
+              display: 'flex', alignItems: 'center', gap: 9,
+              padding: '7px 10px', borderRadius: 8, fontSize: 13,
+              fontWeight: active ? 500 : 400,
+              color: active ? 'var(--text-primary)' : 'var(--text-tertiary)',
+              background: active ? 'var(--surface-3)' : 'transparent',
+              border: active ? '1px solid var(--border)' : '1px solid transparent',
+              textDecoration: 'none', transition: 'all 0.15s',
+            }}>
+              <span style={{ fontSize: 15, opacity: active ? 1 : 0.5 }}>{adminNavItem.icon}</span>
+              {adminNavItem.label}
+            </Link>
+          )
+        })()}
+      </div>
 
       {/* Footer */}
       <div style={{

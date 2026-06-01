@@ -40,11 +40,11 @@
     /* ─────────────────────────────────────────────────────── */
     /* Brand Colors */
     /* ─────────────────────────────────────────────────────── */
-    --brand: #7c3aed;              /* Vibrant purple */
-    --brand-dim: rgba(124, 58, 237, 0.15);
-    --brand-glow: rgba(124, 58, 237, 0.4);
-    --brand-hover: #6d28d9;
-    --brand-active: #5b21b6;
+    --brand: #3b82f6;
+    --brand-dim: rgba(59, 130, 246, 0.15);
+    --brand-glow: rgba(59, 130, 246, 0.35);
+    --brand-hover: #2563eb;
+    --brand-active: #1d4ed8;
 
     /* ─────────────────────────────────────────────────────── */
     /* Semantic Colors */
@@ -295,10 +295,26 @@
   flex: 1;
   min-height: 100vh;
   background: var(--surface-0);
+  /* prevent any child from causing horizontal scroll */
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 .bottom-nav {
   display: none;
+}
+
+/* Agent card action buttons — wrap on mobile */
+.agent-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Scrollable container for wide tables */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Mobile: sidebar hidden, bottom nav visible, main full width */
@@ -309,7 +325,49 @@
 
   .dashboard-main {
     margin-left: 0;
-    padding-bottom: 68px;
+    padding-bottom: 72px;
+    width: 100vw;
+  }
+
+  /* Tighten page padding */
+  .dashboard-main > div {
+    padding: 18px 14px !important;
+  }
+
+  /* 4-col stat grid → 2-col */
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Side-by-side panels → single column */
+  .two-col-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Agent card: stack content and actions vertically */
+  .agent-card-inner {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  .agent-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .agent-actions button {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 11px !important;
+    padding: 7px 8px !important;
+  }
+
+  /* Tab bars — scroll horizontally instead of wrapping */
+  .tab-bar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    white-space: nowrap;
   }
 
   .bottom-nav {
@@ -323,21 +381,6 @@
     border-top: 1px solid var(--border);
     z-index: 50;
     padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  /* Tighten dashboard page padding on small screens */
-  .dashboard-main > div {
-    padding: 20px 16px !important;
-  }
-
-  /* Stack stat cards to 2-col grid on mobile */
-  .dashboard-main [style*="repeat(4, 1fr)"] {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-
-  /* Stack agent/result panels to single column */
-  .dashboard-main [style*="1fr 1fr"] {
-    grid-template-columns: 1fr !important;
   }
 }
 
