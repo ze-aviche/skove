@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useAuth } from '@clerk/nextjs'
+import { useAuth, useClerk } from '@clerk/nextjs'
+import { useRouter } from 'next/navigation'
 import { useToast } from '@/app/providers'
 import { getBillingPlan, createCheckoutSession, createBillingPortalSession, UserPlan } from '@/lib/api'
 import { useSearchParams } from 'next/navigation'
@@ -59,6 +60,11 @@ export default function ProfilePage() {
       setBillingLoading(false)
     }
   }
+
+  const { signOut } = useClerk()
+  const router = useRouter()
+
+  const handleSignOut = () => signOut(() => router.push('/'))
 
   const plan = billing?.plan ?? 'free'
   const planStyle = PLAN_LABELS[plan] ?? PLAN_LABELS.free
@@ -132,6 +138,18 @@ export default function ProfilePage() {
             </div>
           </div>
         )}
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <button
+          onClick={handleSignOut}
+          style={{
+            fontSize: 13, fontWeight: 500, padding: '9px 18px', borderRadius: 9,
+            border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.06)',
+            color: '#ef4444', cursor: 'pointer', width: '100%',
+          }}
+        >
+          Sign out
+        </button>
       </div>
     </div>
   )
