@@ -6,11 +6,11 @@ import { useAuth } from '@clerk/nextjs'
 import { getResults } from '@/lib/api'
 
 const navItems = [
-  { label: 'Home',    href: '/dashboard',         icon: '▦' },
-  { label: 'Agents',  href: '/dashboard/agents',  icon: '⬡' },
-  { label: 'Alerts',  href: '/dashboard/alerts',  icon: '◎' },
-  { label: 'Store',   href: '/dashboard/store',   icon: '⊞' },
-  { label: 'Profile', href: '/dashboard/profile', icon: '◉' },
+  { label: 'Home',    href: '/dashboard',          icon: '▦' },
+  { label: 'Agents',  href: '/dashboard/agents',   icon: '⬡' },
+  { label: 'Results', href: '/dashboard/results',  icon: '◈' },
+  { label: 'Store',   href: '/dashboard/store',    icon: '⊞' },
+  { label: 'Profile', href: '/dashboard/profile',  icon: '◉' },
 ]
 
 export default function BottomNav() {
@@ -56,7 +56,7 @@ export default function BottomNav() {
             <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, letterSpacing: '0.01em' }}>
               {item.label}
             </span>
-            {item.label === 'Alerts' && unreadCount > 0 && (
+            {item.label === 'Results' && unreadCount > 0 && (
               <span style={{
                 position: 'absolute', top: 6, right: '50%',
                 transform: 'translateX(10px)',

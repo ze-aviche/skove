@@ -10,7 +10,6 @@ const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: '▦' },
   { label: 'My agents', href: '/dashboard/agents', icon: '⬡' },
   { label: 'Results', href: '/dashboard/results', icon: '◈' },
-  { label: 'Alerts', href: '/dashboard/alerts', icon: '◎' },
   { label: 'Agent store', href: '/dashboard/store', icon: '⊞' },
   { label: 'Profile', href: '/dashboard/profile', icon: '◉' },
 ]
@@ -120,7 +119,7 @@ export default function Sidebar() {
             }}>
               <span style={{ fontSize: 15, opacity: active ? 1 : 0.6 }}>{item.icon}</span>
               {item.label}
-              {item.label === 'Alerts' && unreadCount > 0 && (
+              {item.label === 'Results' && unreadCount > 0 && (
                 <span style={{
                   marginLeft: 'auto',
                   fontSize: 10,

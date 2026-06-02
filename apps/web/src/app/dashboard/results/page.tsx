@@ -6,7 +6,6 @@ import { useToast } from '@/app/providers'
 import { getResults, markResultRead, downloadDocument, AgentResult } from '@/lib/api'
 
 type Tab = 'All' | 'Unread' | 'Flights' | 'Jobs' | 'Rentals' | 'Stocks' | 'News'
-
 const TABS: Tab[] = ['All', 'Unread', 'Flights', 'Jobs', 'Rentals', 'Stocks', 'News']
 
 function agentType(r: AgentResult): string {
@@ -15,13 +14,29 @@ function agentType(r: AgentResult): string {
     : ''
 }
 
-function urlLabel(r: AgentResult): string {
+function iconForResult(r: AgentResult): string {
   const t = agentType(r)
-  if (t.includes('flight')) return 'View flights'
-  if (t.includes('rental')) return 'View listing'
-  if (t.includes('stock')) return 'View stock'
-  if (t.includes('news') || t.includes('keyword')) return 'Read article'
-  return 'Open'
+  if (t.includes('flight')) return '✈️'
+  if (t.includes('job')) return '💼'
+  if (t.includes('rental') || t.includes('real estate')) return '🏠'
+  if (t.includes('stock') || t.includes('finance')) return '📈'
+  if (t.includes('news') || t.includes('keyword')) return '📰'
+  return '◎'
+}
+
+function urlLabel(r: AgentResult): string {
+  const icon = iconForResult(r)
+  if (icon === '✈️') return 'View flights →'
+  if (icon === '🏠') return 'View listing →'
+  if (icon === '📈') return 'View stock →'
+  if (icon === '📰') return 'Read article →'
+  return 'Apply →'
+}
+
+function bodyForResult(r: AgentResult): string {
+  const t = agentType(r)
+  if (r.value) return `${r.value} · ${t || 'Agent result'}`
+  return t || 'Agent update available.'
 }
 
 function matchesTab(r: AgentResult, tab: Tab): boolean {
@@ -45,9 +60,63 @@ export default function ResultsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('All')
+  const [expandedCoverLetter, setExpandedCoverLetter] = useState<string | null>(null)
   const [downloading, setDownloading] = useState<string | null>(null)
   const auth = useAuth()
   const { showToast } = useToast()
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const token = await auth.getToken()
+        setResults(await getResults(token))
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to load results'
+        setError(message)
+        showToast({ message, variant: 'error' })
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
+
+  const unread = useMemo(() => results.filter(r => !r.isRead).length, [results])
+  const filtered = useMemo(() => results.filter(r => matchesTab(r, activeTab)), [results, activeTab])
+
+  const tabCounts = useMemo(() => {
+    const counts: Partial<Record<Tab, number>> = {}
+    for (const tab of TABS) {
+      if (tab !== 'All') counts[tab] = results.filter(r => matchesTab(r, tab)).length
+    }
+    return counts
+  }, [results])
+
+  const handleMarkRead = async (id: string) => {
+    try {
+      const token = await auth.getToken()
+      const updated = await markResultRead(id, token)
+      setResults(prev => prev.map(r => r.id === updated.id ? updated : r))
+      window.dispatchEvent(new CustomEvent('results:changed'))
+      showToast({ message: 'Marked as read', variant: 'success' })
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'Failed to mark read', variant: 'error' })
+    }
+  }
+
+  const handleMarkAllRead = async () => {
+    const unreadItems = filtered.filter(r => !r.isRead)
+    if (unreadItems.length === 0) return
+    try {
+      const token = await auth.getToken()
+      await Promise.all(unreadItems.map(r => markResultRead(r.id, token)))
+      setResults(prev => prev.map(r => unreadItems.some(u => u.id === r.id) ? { ...r, isRead: true } : r))
+      window.dispatchEvent(new CustomEvent('results:changed'))
+      showToast({ message: `${unreadItems.length} result${unreadItems.length !== 1 ? 's' : ''} marked read`, variant: 'success' })
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'Failed to mark all read', variant: 'error' })
+    }
+  }
 
   const handleDownload = async (r: AgentResult, type: 'resume' | 'cover', format: 'pdf' | 'docx') => {
     const key = `${r.id}-${type}-${format}`
@@ -67,51 +136,22 @@ export default function ResultsPage() {
     }
   }
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const token = await auth.getToken()
-        setResults(await getResults(token))
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to load results'
-        showToast({ message, variant: 'error' })
-        setError(message)
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [])
-
-  const filtered = useMemo(() => results.filter(r => matchesTab(r, activeTab)), [results, activeTab])
-
-  const handleMarkAllRead = async () => {
-    const unread = filtered.filter(r => !r.isRead)
-    if (unread.length === 0) return
-    try {
-      const token = await auth.getToken()
-      await Promise.all(unread.map(r => markResultRead(r.id, token)))
-      setResults(prev => prev.map(r => unread.some(u => u.id === r.id) ? { ...r, isRead: true } : r))
-      showToast({ message: `${unread.length} result${unread.length !== 1 ? 's' : ''} marked read`, variant: 'success' })
-    } catch (err) {
-      showToast({ message: err instanceof Error ? err.message : 'Failed to mark all read', variant: 'error' })
-    }
-  }
-
-  const tabCounts = useMemo(() => {
-    const counts: Partial<Record<Tab, number>> = {}
-    for (const tab of TABS) {
-      const n = results.filter(r => matchesTab(r, tab)).length
-      if (tab !== 'All') counts[tab] = n
-    }
-    return counts
-  }, [results])
-
   return (
     <div style={{ padding: '32px 36px', animation: 'fadeIn 0.4s ease' }}>
       <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>Results</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>Results</h1>
+            {unread > 0 && (
+              <span style={{
+                fontSize: 12, fontWeight: 600,
+                padding: '2px 10px', borderRadius: 99,
+                background: 'var(--warning-dim)',
+                color: 'var(--warning)',
+                border: '1px solid rgba(245,158,11,0.2)',
+              }}>{unread} unread</span>
+            )}
+          </div>
           {filtered.some(r => !r.isRead) && (
             <button onClick={handleMarkAllRead} style={{
               fontSize: 12, fontWeight: 500,
@@ -173,55 +213,92 @@ export default function ResultsPage() {
             <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>No results in this category.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {filtered.map((r) => (
-                <div key={r.id} style={{
-                  background: 'var(--surface-2)',
-                  border: `1px solid ${r.isRead ? 'var(--border)' : 'var(--border-hover)'}`,
-                  borderRadius: 12,
-                  padding: '13px 16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 14,
-                }}>
-                  <span style={{
-                    width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                    background: r.isRead ? 'var(--text-tertiary)' : 'var(--green)',
-                    boxShadow: r.isRead ? 'none' : '0 0 8px var(--green)',
-                  }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
+              {filtered.map((r) => {
+                const meta = (r.metadata ?? {}) as Record<string, unknown>
+                const hasResume = !!meta.tailoredResumeText
+                const hasCover = !!meta.coverLetter
+                const matchScore = meta.matchScore != null ? Number(meta.matchScore) : null
+                const matchReasoning = typeof meta.matchReasoning === 'string' ? meta.matchReasoning : null
+
+                return (
+                  <div key={r.id} style={{
+                    background: r.isRead ? 'var(--surface-1)' : 'var(--surface-2)',
+                    border: `1px solid ${r.isRead ? 'var(--border)' : 'var(--border-hover)'}`,
+                    borderRadius: 12,
+                    padding: '14px 16px',
+                    display: 'flex',
+                    gap: 14,
+                    alignItems: 'flex-start',
+                  }}>
                     <div style={{
-                      fontSize: 13,
-                      fontWeight: r.isRead ? 400 : 500,
-                      color: r.isRead ? 'var(--text-secondary)' : 'var(--text-primary)',
-                      marginBottom: 2,
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {r.title}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                      {r.value ? `${r.value} · ` : ''}
-                      {agentType(r) || 'Agent result'}
-                    </div>
-                  </div>
-                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)', flexShrink: 0 }}>{new Date(r.createdAt).toLocaleString()}</span>
-                  {r.url && (
-                    <a href={r.url} target="_blank" rel="noreferrer" style={{
-                      fontSize: 11, fontWeight: 500,
-                      padding: '4px 12px', borderRadius: 7,
-                      border: '1px solid var(--brand)',
-                      background: 'var(--brand-dim)',
-                      color: 'var(--brand)',
-                      cursor: 'pointer', flexShrink: 0,
-                      textDecoration: 'none',
-                    }}>{urlLabel(r)}</a>
-                  )}
-                  {agentType(r).includes('job') && (() => {
-                    const meta = (r.metadata ?? {}) as Record<string, unknown>
-                    const hasResume = !!meta.tailoredResumeText
-                    const hasCover = !!meta.coverLetter
-                    if (!hasResume && !hasCover) return null
-                    return (
-                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      width: 36, height: 36, borderRadius: 10,
+                      background: 'var(--surface-3)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 18, flexShrink: 0,
+                    }}>{iconForResult(r)}</div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <span style={{
+                          fontSize: 13, fontWeight: r.isRead ? 400 : 600,
+                          color: 'var(--text-primary)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {r.title || 'New agent finding'}
+                        </span>
+                        {!r.isRead && (
+                          <span style={{
+                            width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                            background: 'var(--green)',
+                            boxShadow: '0 0 6px var(--green)',
+                            display: 'inline-block',
+                          }} />
+                        )}
+                      </div>
+
+                      {matchScore !== null && !isNaN(matchScore) && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                          <span style={{
+                            fontSize: 11, fontWeight: 700,
+                            padding: '2px 8px', borderRadius: 99,
+                            background: matchScore >= 8 ? 'var(--success-dim)' : 'var(--brand-dim)',
+                            color: matchScore >= 8 ? 'var(--success)' : 'var(--brand)',
+                            border: `1px solid ${matchScore >= 8 ? 'rgba(16,185,129,0.2)' : 'rgba(59,130,246,0.2)'}`,
+                          }}>
+                            AI Match {matchScore}/10
+                          </span>
+                          {matchReasoning && (
+                            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{matchReasoning}</span>
+                          )}
+                        </div>
+                      )}
+
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 8 }}>
+                        {bodyForResult(r)}
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        {r.url && (
+                          <a href={r.url} target="_blank" rel="noreferrer" style={{
+                            fontSize: 11, fontWeight: 500,
+                            color: 'var(--brand)', textDecoration: 'none',
+                          }}>{urlLabel(r)}</a>
+                        )}
+                        {hasCover && (
+                          <button
+                            onClick={() => setExpandedCoverLetter(expandedCoverLetter === r.id ? null : r.id)}
+                            style={{
+                              fontSize: 11, fontWeight: 500,
+                              padding: '4px 10px', borderRadius: 7,
+                              border: '1px solid var(--border)',
+                              background: 'var(--surface-3)',
+                              color: 'var(--text-secondary)',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {expandedCoverLetter === r.id ? 'Hide cover letter' : '📝 View cover letter'}
+                          </button>
+                        )}
                         {hasResume && (
                           <>
                             <button onClick={() => handleDownload(r, 'resume', 'pdf')} disabled={!!downloading} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-3)', color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
@@ -243,29 +320,37 @@ export default function ResultsPage() {
                           </>
                         )}
                       </div>
-                    )
-                  })()}
-                  {!r.isRead && (
-                    <button onClick={async () => {
-                      try {
-                        const token = await auth.getToken()
-                        const updated = await markResultRead(r.id, token)
-                        setResults((prev) => prev.map((p) => p.id === updated.id ? updated : p))
-                        showToast({ message: 'Marked result as read', variant: 'success' })
-                      } catch (err) {
-                        showToast({ message: err instanceof Error ? err.message : 'Failed to mark read', variant: 'error' })
-                      }
-                    }} style={{
-                      fontSize: 11, fontWeight: 500,
-                      padding: '4px 12px', borderRadius: 7,
-                      border: '1px solid var(--border)',
-                      background: 'var(--surface-3)',
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer', flexShrink: 0,
-                    }}>Mark read</button>
-                  )}
-                </div>
-              ))}
+
+                      {expandedCoverLetter === r.id && hasCover && (
+                        <div style={{
+                          marginTop: 12, padding: '14px 16px',
+                          background: 'var(--surface-1)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 10,
+                          fontSize: 12, color: 'var(--text-secondary)',
+                          lineHeight: 1.7, whiteSpace: 'pre-wrap',
+                        }}>
+                          {String(meta.coverLetter)}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{new Date(r.createdAt).toLocaleString()}</span>
+                      {!r.isRead && (
+                        <button onClick={() => handleMarkRead(r.id)} style={{
+                          fontSize: 11, fontWeight: 600,
+                          padding: '6px 10px', borderRadius: 8,
+                          border: '1px solid var(--border)',
+                          background: 'var(--surface-3)',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer',
+                        }}>Mark read</button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </>
