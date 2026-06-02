@@ -43,11 +43,14 @@ function getInstanceLabel(agentId: string, config: Record<string, unknown>): str
     case 'rental-listing-monitor':
       if (config.city) {
         const parts: string[] = [String(config.city)]
+        if (config.listingType) parts.push(String(config.listingType))
         if (config.bedrooms && config.bedrooms !== 'Any') parts.push(`${config.bedrooms}BR`)
         if (config.propertyType && config.propertyType !== 'Any') parts.push(String(config.propertyType))
-        if (config.minRent && config.maxRent) parts.push(`$${config.minRent}–$${config.maxRent}`)
-        else if (config.maxRent) parts.push(`max $${config.maxRent}`)
-        else if (config.minRent) parts.push(`from $${config.minRent}`)
+        const minP = config.minPrice ?? config.minRent
+        const maxP = config.maxPrice ?? config.maxRent
+        if (minP && maxP) parts.push(`$${minP}–$${maxP}`)
+        else if (maxP) parts.push(`max $${maxP}`)
+        else if (minP) parts.push(`from $${minP}`)
         return parts.join(' · ')
       }
       break

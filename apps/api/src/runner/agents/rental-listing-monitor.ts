@@ -2,11 +2,14 @@ import { AgentRunResult } from './flight-watcher'
 import { RunnerContext } from './index'
 import { log } from '../../lib/logger'
 
-interface RentalConfig {
+interface RealEstateConfig {
+  listingType?: string
   city?: string
   propertyType?: string
-  minRent?: number | string
-  maxRent?: number | string
+  minPrice?: number | string
+  maxPrice?: number | string
+  minRent?: number | string   // backwards compat
+  maxRent?: number | string   // backwards compat
   bedrooms?: string
   bathrooms?: string
   petsAllowed?: boolean
@@ -16,8 +19,6 @@ interface SerpOrganicResult {
   title?: string
   link?: string
   snippet?: string
-  displayed_link?: string
-  source?: string
 }
 
 interface SerpResponse {
@@ -25,52 +26,336 @@ interface SerpResponse {
   error?: string
 }
 
-// Known rental listing domains to filter/prioritise
-const RENTAL_DOMAINS = [
-  'zillow.com',
-  'redfin.com',
-  'apartments.com',
-  'rentals.com',
-  'trulia.com',
-  'realtor.com',
-  'hotpads.com',
-  'rent.com',
-  'padmapper.com',
-  'zumper.com',
-  'forrent.com',
-  'abodo.com',
+// ── Domain lists per listing type ────────────────────────────────────────────
+
+const RENT_DOMAINS = [
+  'zillow.com', 'redfin.com', 'apartments.com', 'rentals.com',
+  'trulia.com', 'realtor.com', 'hotpads.com', 'rent.com',
+  'padmapper.com', 'zumper.com',
 ]
 
-function sourceLabel(link: string): string {
-  const match = RENTAL_DOMAINS.find(d => link.includes(d))
-  if (!match) return 'Web'
-  // Capitalise first letter, strip .com suffix for display
-  return match.replace('.com', '').replace(/^\w/, c => c.toUpperCase())
+const BUY_DOMAINS = [
+  'zillow.com', 'redfin.com', 'realtor.com', 'trulia.com',
+  'homes.com', 'movoto.com', 'homesnap.com', 'estately.com',
+]
+
+const LEASE_DOMAINS = [
+  'zillow.com', 'redfin.com', 'realtor.com', 'trulia.com',
+  'loopnet.com', 'crexi.com', 'commercialcafe.com',
+]
+
+function domainsForType(t: string): string[] {
+  if (t === 'Buy') return BUY_DOMAINS
+  if (t === 'Lease') return LEASE_DOMAINS
+  return RENT_DOMAINS
 }
 
-// Extract monthly price from a snippet or title string
-function extractPrice(text: string): number | null {
-  // Matches $1,234/mo  $1234/mo  $1,234 per month  $1,234 a month
-  const m = text.match(/\$[\d,]+(?:\.\d+)?(?:\s*\/\s*mo|\s*per\s+month|\s*a\s+month|\s*\/month)/i)
-  if (!m) {
-    // Fallback: look for standalone "$X,XXX" where X >= 500 (likely a rent, not a fee)
-    const fb = text.match(/\$(\d{1,2},?\d{3})\b/)
-    if (fb) {
-      const n = Number(fb[1].replace(',', ''))
-      if (n >= 400 && n <= 20000) return n
+// ── Individual listing detection (per site) ──────────────────────────────────
+// Blocks category/search pages — user wants one specific property, not a list.
+
+function isIndividualListing(link: string): boolean {
+  try {
+    const { hostname, pathname } = new URL(link)
+    const host = hostname.toLowerCase()
+    const path = pathname.toLowerCase()
+
+    if (host.includes('zillow.com')) {
+      // Individual listings always contain /homedetails/ or end with _zpid
+      return path.includes('/homedetails/') || link.toLowerCase().includes('_zpid')
     }
-    return null
+    if (host.includes('redfin.com')) {
+      // Individual: path ends with /home/NNNNN
+      return /\/home\/\d+\/?$/.test(path)
+    }
+    if (host.includes('apartments.com')) {
+      // Category/filter pages end with slugs like "2-bedrooms", "under-1500", "pet-friendly"
+      // (all contain hyphens). Individual listing IDs are compact alphanumeric with no hyphens,
+      // e.g. "6k1hyx5", "zt73rdb", "123456".
+      const segs = path.split('/').filter(Boolean)
+      if (segs.length < 2) return false
+      const lastSeg = segs[segs.length - 1]
+      return /^[a-z0-9]{4,12}$/.test(lastSeg) // alphanumeric, no hyphens = listing ID
+    }
+    if (host.includes('realtor.com')) {
+      return path.includes('/realestateandhomes-detail/')
+    }
+    if (host.includes('trulia.com')) {
+      // Individual pages are under /p/
+      return path.includes('/p/')
+    }
+    if (host.includes('zumper.com')) {
+      return path.includes('/renter/p')
+    }
+    if (host.includes('hotpads.com')) {
+      // Individual listings end with a long numeric ID
+      return /\/\d{5,}\/?$/.test(path)
+    }
+    if (host.includes('rentals.com')) {
+      // /listings/city/complex/id needs at least 3 segments
+      return path.split('/').filter(Boolean).length >= 3
+    }
+    if (host.includes('loopnet.com') || host.includes('crexi.com')) {
+      // Commercial: individual listings have a numeric id in the path
+      return /\/\d{4,}/.test(path)
+    }
+    // Unknown domain — pass through
+    return true
+  } catch {
+    return true
   }
-  return Number(m[0].replace(/[^0-9]/g, ''))
 }
 
-// Extract bedroom count from text
+// ── Listing type text validation ─────────────────────────────────────────────
+// Catches cases where URL signals miss cross-type contamination
+// (e.g. Redfin for-sale individual page has no 'for-sale' in the URL).
+//
+// Strategy: use DEFINITIVE signals only. Any unambiguous sale phrase in a Rent
+// result is an immediate reject — we don't try to "balance" signals because a
+// sale listing mentioning HOA fees ("/mo") would otherwise pass the rent filter.
+
+const DEFINITIVE_SALE_SIGNALS = [
+  'for sale', 'sale price', 'listing price', 'list price',
+  'listed at', 'sold for', 'sale pending', 'price reduced',
+  'just listed', 'new listing',
+]
+
+const DEFINITIVE_RENT_SIGNALS = ['for rent', 'for lease']
+
+function matchesListingTypeText(title: string, snippet: string, listingType: string): boolean {
+  const text = `${title} ${snippet}`.toLowerCase()
+
+  if (listingType === 'Rent') {
+    // Hard reject: ANY definitive sale phrase disqualifies — HOA "/mo" cannot rescue it
+    if (DEFINITIVE_SALE_SIGNALS.some(s => text.includes(s))) return false
+    return true
+  }
+
+  if (listingType === 'Buy') {
+    // Hard reject: any explicit rent/lease phrase disqualifies
+    if (DEFINITIVE_RENT_SIGNALS.some(s => text.includes(s))) return false
+    // Also reject if text shows rental pricing (/mo, per month) with no sale context
+    const hasMonthlyPrice = text.includes('/mo') || text.includes('per month')
+    const hasSaleContext  = DEFINITIVE_SALE_SIGNALS.some(s => text.includes(s))
+    if (hasMonthlyPrice && !hasSaleContext) return false
+    return true
+  }
+
+  if (listingType === 'Lease') {
+    // Hard reject on definitive sale signals with no lease context
+    const hasSale  = DEFINITIVE_SALE_SIGNALS.some(s => text.includes(s))
+    const hasLease = text.includes('for lease') || text.includes('lease')
+    if (hasSale && !hasLease) return false
+    return true
+  }
+
+  return true
+}
+
+// ── URL-level listing type enforcement ───────────────────────────────────────
+// Blocks pages where the URL path itself contradicts the requested listing type.
+
+// Path fragments that definitively mean FOR-SALE
+const SALE_URL_SIGNALS = [
+  'for_sale', 'for-sale', 'homes-for-sale', 'houses-for-sale',
+  'property-for-sale', '/sold/', 'forsale', '/buy/',
+]
+
+// Path fragments that definitively mean FOR-RENT (used to block Buy results)
+const RENT_URL_SIGNALS = [
+  'for_rent', 'for-rent', 'homes-for-rent', 'houses-for-rent', 'forrent',
+]
+
+// ── Article / report filter ───────────────────────────────────────────────────
+
+const NON_LISTING_PATHS = [
+  '/blog/', '/news/', '/research/', '/report/', '/reports/',
+  '/market/', '/trends/', '/insights/', '/press/', '/about/',
+  '/learn/', '/guide/', '/guides/', '/advice/', '/resources/',
+  '/help/', '/faq/', '/glossary/', '/tag/', '/category/',
+  '/rental-market/', '/rent-report/', '/rent-trends/', '/housing-market/',
+]
+
+const ARTICLE_TITLE_RE = [
+  /\breport\b/i, /\bdata[:\s]/i, /\btrends?\b/i, /\bmarket\b/i,
+  /\binsights?\b/i, /\bforecast\b/i, /\bindex\b/i, /\bguide\b/i,
+  /\bhow\s+to\b/i, /\btips?\b/i, /\d{4}\s+rental/i,
+  /rental\s+market/i, /rent\s+prices/i, /average\s+rent/i,
+  /housing\s+market/i, /home\s+prices/i, /real\s+estate\s+market/i,
+]
+
+// ── Master URL validity check ─────────────────────────────────────────────────
+
+function isValidResult(link: string, title: string, listingType: string): boolean {
+  const url = link.toLowerCase()
+
+  // 1. Article / report — drop for all types
+  if (NON_LISTING_PATHS.some(p => url.includes(p))) return false
+  if (ARTICLE_TITLE_RE.some(r => r.test(title))) return false
+
+  // 2. Must be an individual property page, not a search/category page
+  if (!isIndividualListing(link)) return false
+
+  // 3. URL-level listing type enforcement
+  if (listingType === 'Rent' || listingType === 'Lease') {
+    if (SALE_URL_SIGNALS.some(s => url.includes(s))) return false
+  }
+  if (listingType === 'Buy') {
+    if (RENT_URL_SIGNALS.some(s => url.includes(s))) return false
+    // Rental-only domains have no for-sale inventory
+    if (['apartments.com', 'rentals.com', 'zumper.com', 'padmapper.com']
+      .some(d => url.includes(d))) return false
+  }
+
+  return true
+}
+
+// ── Property type filter ──────────────────────────────────────────────────────
+
+const TYPE_SIGNALS: Record<string, string[]> = {
+  House:     ['house', 'home', 'single family', 'single-family', 'sfh'],
+  Apartment: ['apartment', 'apt', 'flat'],
+  Condo:     ['condo', 'condominium'],
+  Townhouse: ['townhouse', 'townhome', 'town house'],
+  Studio:    ['studio'],
+}
+
+const TYPE_EXCLUSIONS: Record<string, string[]> = {
+  House:     ['apartment', 'apartments', 'condo', 'condos', 'studio'],
+  Apartment: ['house', 'houses', 'single family', 'townhouse'],
+  Condo:     ['house', 'houses', 'single family'],
+  Townhouse: ['apartment', 'apartments', 'studio'],
+  Studio:    ['house', 'houses', 'single family', 'townhouse'],
+}
+
+function matchesPropertyType(title: string, snippet: string, propType?: string): boolean {
+  if (!propType || propType === 'Any') return true
+  const text = `${title} ${snippet}`.toLowerCase()
+  const exclusions = TYPE_EXCLUSIONS[propType] ?? []
+  if (!exclusions.some(t => text.includes(t))) return true
+  return (TYPE_SIGNALS[propType] ?? []).some(t => text.includes(t))
+}
+
+// ── Query builders ────────────────────────────────────────────────────────────
+
+const LISTING_PHRASE: Record<string, string> = {
+  Rent:  '"for rent"',
+  Buy:   '"for sale"',
+  Lease: '"for lease"',
+}
+
+const LISTING_NEGATIVES: Record<string, string[]> = {
+  Rent:  ['-"for sale"', '-"just sold"', '-sold'],
+  Buy:   ['-"for rent"', '-rental', '-"per month"'],
+  Lease: ['-"for sale"', '-sold'],
+}
+
+const PROP_TYPE_TERM: Record<string, string> = {
+  House: 'house', Apartment: 'apartment', Condo: 'condo',
+  Townhouse: 'townhouse', Studio: 'studio', Land: 'land',
+  Commercial: 'commercial property',
+}
+
+function buildQuery(cfg: RealEstateConfig): string {
+  const lt = cfg.listingType ?? 'Rent'
+  const parts: string[] = []
+
+  if (cfg.bedrooms && cfg.bedrooms !== 'Any' &&
+      cfg.propertyType !== 'Land' && cfg.propertyType !== 'Commercial') {
+    if (cfg.bedrooms === 'Studio') parts.push('studio')
+    else if (cfg.bedrooms === '4+') parts.push('4+ bedroom')
+    else parts.push(`${cfg.bedrooms} bedroom`)
+  }
+
+  parts.push(
+    cfg.propertyType && cfg.propertyType !== 'Any'
+      ? (PROP_TYPE_TERM[cfg.propertyType] ?? 'home')
+      : 'home'
+  )
+
+  // Exact phrase — key fix that prevents cross-type matches
+  parts.push(LISTING_PHRASE[lt] ?? '"for rent"')
+
+  if (cfg.city) parts.push(`"${cfg.city}"`)
+
+  // Explicit negatives for the other listing types
+  parts.push(...(LISTING_NEGATIVES[lt] ?? []))
+
+  // Property type exclusion terms
+  const excl = cfg.propertyType ? TYPE_EXCLUSIONS[cfg.propertyType] : null
+  if (excl?.length) excl.slice(0, 2).forEach(e => parts.push(`-${e}`))
+
+  const minP = cfg.minPrice ?? cfg.minRent
+  const maxP = cfg.maxPrice ?? cfg.maxRent
+  if (minP && maxP) parts.push(`$${minP}-$${maxP}`)
+  else if (maxP) parts.push(`under $${maxP}`)
+  else if (minP) parts.push(`from $${minP}`)
+
+  if (cfg.petsAllowed && lt === 'Rent') parts.push('pet friendly')
+
+  return parts.join(' ')
+}
+
+// Site queries use path-specific prefixes where possible to target
+// individual listing pages at the query level (not just post-filter).
+function buildSiteQuery(baseQuery: string, lt: string): string {
+  if (lt === 'Buy') {
+    return `${baseQuery} (site:zillow.com/homedetails OR site:redfin.com OR site:realtor.com/realestateandhomes-detail OR site:trulia.com/p OR site:homes.com OR site:movoto.com)`
+  }
+  if (lt === 'Lease') {
+    return `${baseQuery} (site:zillow.com/homedetails OR site:redfin.com OR site:realtor.com/realestateandhomes-detail OR site:trulia.com/p OR site:loopnet.com OR site:crexi.com)`
+  }
+  // Rent
+  return `${baseQuery} (site:zillow.com/homedetails OR site:redfin.com OR site:apartments.com OR site:realtor.com/realestateandhomes-detail OR site:trulia.com/p OR site:zumper.com/renter OR site:hotpads.com)`
+}
+
+// ── Price extraction ──────────────────────────────────────────────────────────
+
+function extractRentPrice(text: string): number | null {
+  // $1,234/mo  $1,234 per month
+  const m = text.match(/\$[\d,]+(?:\.\d+)?(?:\s*\/\s*mo|\s*per\s+month|\s*\/month)/i)
+  if (m) return Number(m[0].replace(/[^0-9]/g, ''))
+  // Fallback: bare $X,XXX — use negative lookahead to reject the thousand-portion
+  // of larger numbers like $1,200,000 (which has \b after "200" but isn't a rent price).
+  const fb = text.match(/\$(\d{1,2},\d{3})(?!,\d)\b/)
+  if (fb) {
+    const n = Number(fb[1].replace(',', ''))
+    if (n >= 400 && n <= 20_000) return n
+  }
+  return null
+}
+
+function extractSalePrice(text: string): number | null {
+  const mM = text.match(/\$([\d.]+)\s*[Mm]\b/)
+  if (mM) return Math.round(parseFloat(mM[1]) * 1_000_000)
+  const mK = text.match(/\$([\d,]+)\s*[Kk]\b/)
+  if (mK) return Math.round(Number(mK[1].replace(',', '')) * 1_000)
+  // $450,000 or $1,200,000 — must be 6+ digit number
+  const m = text.match(/\$([\d,]{6,})\b/)
+  if (m) {
+    const n = Number(m[1].replace(/,/g, ''))
+    if (n >= 50_000) return n
+  }
+  return null
+}
+
+function extractPrice(text: string, lt: string): number | null {
+  return lt === 'Buy' ? extractSalePrice(text) : extractRentPrice(text)
+}
+
+function formatPrice(price: number, lt: string): string {
+  if (lt === 'Buy') {
+    if (price >= 1_000_000) return `$${(price / 1_000_000).toFixed(1)}M`
+    if (price >= 1_000) return `$${Math.round(price / 1_000)}k`
+    return `$${price.toLocaleString()}`
+  }
+  return `$${price.toLocaleString()}/mo`
+}
+
 function extractBeds(text: string): number | null {
   const m = text.match(/(\d+)\s*(?:bed(?:room)?s?|br\b)/i)
   return m ? Number(m[1]) : null
 }
 
-// Extract bath count from text
 function extractBaths(text: string): number | null {
   const m = text.match(/([\d.]+)\s*(?:bath(?:room)?s?|ba\b)/i)
   return m ? Number(m[1]) : null
@@ -80,85 +365,19 @@ function bedsLabel(n: number): string {
   return n === 0 ? 'Studio' : `${n}BR`
 }
 
-// Terms that signal each property type in a result title/snippet
-const TYPE_SIGNALS: Record<string, string[]> = {
-  House:     ['house', 'home', 'single family', 'single-family'],
-  Apartment: ['apartment', 'apt', 'flat', 'unit'],
-  Condo:     ['condo', 'condominium'],
-  Townhouse: ['townhouse', 'townhome', 'town house', 'town home'],
-  Studio:    ['studio'],
+function sourceLabel(link: string, lt: string): string {
+  const match = domainsForType(lt).find(d => link.includes(d))
+  if (!match) return 'Web'
+  return match.replace('.com', '').replace(/^\w/, c => c.toUpperCase())
 }
 
-// Terms that contradict the requested property type — used for query exclusions and result filtering
-const TYPE_EXCLUSIONS: Record<string, string[]> = {
-  House:     ['apartment', 'apartments', 'condo', 'condos', 'studio'],
-  Apartment: ['house', 'houses', 'single family', 'townhouse', 'townhome'],
-  Condo:     ['house', 'houses', 'single family', 'townhouse'],
-  Townhouse: ['apartment', 'apartments', 'condo', 'studio'],
-  Studio:    ['house', 'houses', 'single family', 'townhouse'],
-}
+// ── SerpAPI call ──────────────────────────────────────────────────────────────
 
-// Returns true if the result title/snippet is compatible with the requested property type
-function matchesPropertyType(title: string, snippet: string, propertyType: string | undefined): boolean {
-  if (!propertyType || propertyType === 'Any') return true
-  const text = `${title} ${snippet}`.toLowerCase()
-  const exclusions = TYPE_EXCLUSIONS[propertyType] ?? []
-  // Reject if any exclusion term appears AND no signal for the wanted type appears
-  const hasExclusion = exclusions.some(t => text.includes(t))
-  if (!hasExclusion) return true
-  const signals = TYPE_SIGNALS[propertyType] ?? []
-  return signals.some(t => text.includes(t))
-}
-
-// Build the Google search query from config
-function buildQuery(cfg: RentalConfig): string {
-  const parts: string[] = []
-
-  // Beds
-  if (cfg.bedrooms && cfg.bedrooms !== 'Any') {
-    if (cfg.bedrooms === 'Studio') parts.push('studio')
-    else if (cfg.bedrooms === '4+') parts.push('4+ bedroom')
-    else parts.push(`${cfg.bedrooms} bedroom`)
-  }
-
-  // Property type — use specific term or generic "homes"
-  if (cfg.propertyType && cfg.propertyType !== 'Any') {
-    const typeQuery: Record<string, string> = {
-      House: 'house',
-      Apartment: 'apartment',
-      Condo: 'condo',
-      Townhouse: 'townhouse',
-      Studio: 'studio apartment',
-    }
-    parts.push(typeQuery[cfg.propertyType] ?? 'home')
-  } else {
-    parts.push('homes')
-  }
-
-  parts.push('for rent')
-
-  // City
-  if (cfg.city) parts.push(`"${cfg.city}"`)
-
-  // Negative keywords: exclude contradicting property types from results
-  const exclusions = cfg.propertyType ? TYPE_EXCLUSIONS[cfg.propertyType] : null
-  if (exclusions?.length) {
-    // Add the first two as -term exclusions (Google supports this)
-    exclusions.slice(0, 2).forEach(e => parts.push(`-${e}`))
-  }
-
-  // Price range
-  if (cfg.minRent && cfg.maxRent) parts.push(`$${cfg.minRent}-$${cfg.maxRent}`)
-  else if (cfg.maxRent) parts.push(`under $${cfg.maxRent}`)
-  else if (cfg.minRent) parts.push(`from $${cfg.minRent}`)
-
-  if (cfg.petsAllowed) parts.push('pet friendly')
-
-  return parts.join(' ')
-}
-
-// One SerpAPI call — returns organic results filtered to rental domains
-async function searchSerpApi(query: string, apiKey: string): Promise<SerpOrganicResult[]> {
+async function searchSerpApi(
+  query: string,
+  apiKey: string,
+  lt: string,
+): Promise<SerpOrganicResult[]> {
   const params = new URLSearchParams({
     engine: 'google',
     q: query,
@@ -166,23 +385,26 @@ async function searchSerpApi(query: string, apiKey: string): Promise<SerpOrganic
     num: '20',
     hl: 'en',
     gl: 'us',
+    lr: 'lang_en',   // English pages only
   })
 
   const res = await fetch(`https://serpapi.com/search.json?${params}`)
   if (!res.ok) {
-    log.warn('rental-monitor', 'serpapi request failed', { status: res.status })
+    log.warn('real-estate', 'serpapi failed', { status: res.status, query })
     return []
   }
 
   const data = await res.json() as SerpResponse
   if (data.error) {
-    log.warn('rental-monitor', 'serpapi error', { error: data.error })
+    log.warn('real-estate', 'serpapi error', { error: data.error })
     return []
   }
 
-  // Keep only results that come from known rental sites
+  const domains = domainsForType(lt)
   return (data.organic_results ?? []).filter(r =>
-    r.link && RENTAL_DOMAINS.some(d => r.link!.includes(d))
+    r.link &&
+    domains.some(d => r.link!.includes(d)) &&
+    isValidResult(r.link, r.title ?? '', lt)
   )
 }
 
@@ -192,100 +414,98 @@ export async function runRentalListingMonitor(
   config: Record<string, unknown>,
   ctx: RunnerContext,
 ): Promise<AgentRunResult[]> {
-  const cfg = config as RentalConfig
+  const cfg = config as RealEstateConfig
   const city = cfg.city ?? 'Unknown'
+  const lt = cfg.listingType ?? 'Rent'
 
   const apiKey = process.env.SERPAPI_KEY
   if (!apiKey) throw new Error('SERPAPI_KEY is not set')
 
-  log.info('rental-monitor', 'starting', { city, config: cfg })
+  log.info('real-estate', 'starting', { city, listingType: lt })
 
-  // Run two parallel queries: one general, one site-targeted to top rental portals
   const generalQuery = buildQuery(cfg)
-  const siteQuery = `${generalQuery} site:zillow.com OR site:redfin.com OR site:apartments.com OR site:rentals.com OR site:trulia.com OR site:realtor.com`
+  const siteQuery    = buildSiteQuery(generalQuery, lt)
 
   const [generalResults, siteResults] = await Promise.all([
-    searchSerpApi(generalQuery, apiKey),
-    searchSerpApi(siteQuery, apiKey),
+    searchSerpApi(generalQuery, apiKey, lt),
+    searchSerpApi(siteQuery, apiKey, lt),
   ])
 
+  // Site-targeted results first (higher precision), then general
   const allResults = [...siteResults, ...generalResults]
-  log.info('rental-monitor', 'serpapi results', {
-    general: generalResults.length,
-    site: siteResults.length,
-    total: allResults.length,
-  })
-
-  if (allResults.length === 0) {
-    log.info('rental-monitor', 'no listings found in search results')
-    return []
-  }
+  log.info('real-estate', 'fetched', { general: generalResults.length, site: siteResults.length })
 
   const results: AgentRunResult[] = []
   const seen = new Set<string>()
+  const minP = cfg.minPrice ?? cfg.minRent
+  const maxP = cfg.maxPrice ?? cfg.maxRent
 
   for (const r of allResults) {
     if (!r.link) continue
 
-    // Deduplicate by URL
-    const urlKey = r.link.split('?')[0] // strip query params
+    // Dedup by URL (strip query params)
+    const urlKey = r.link.split('?')[0]
     if (ctx.seenKeys.has(urlKey) || seen.has(urlKey)) continue
     seen.add(urlKey)
 
-    // Drop results that contradict the requested property type
+    // Title/snippet must confirm the requested listing type
+    if (!matchesListingTypeText(r.title ?? '', r.snippet ?? '', lt)) continue
+
+    // Title/snippet must not contradict the requested property type
     if (!matchesPropertyType(r.title ?? '', r.snippet ?? '', cfg.propertyType)) continue
 
-    const text = `${r.title ?? ''} ${r.snippet ?? ''}`
-    const price = extractPrice(text)
-    const beds = extractBeds(text)
+    const text  = `${r.title ?? ''} ${r.snippet ?? ''}`
+    const price = extractPrice(text, lt)
+    const beds  = extractBeds(text)
     const baths = extractBaths(text)
 
-    // Apply price filter: skip if price is outside configured range
-    const minRent = cfg.minRent ? Number(cfg.minRent) : null
-    const maxRent = cfg.maxRent ? Number(cfg.maxRent) : null
+    // Price range filter
     if (price !== null) {
-      if (minRent && price < minRent) continue
-      if (maxRent && price > maxRent) continue
+      const min = minP ? Number(minP) : null
+      const max = maxP ? Number(maxP) : null
+      if (min && price < min) continue
+      if (max && price > max) continue
     }
 
-    // Apply beds filter
+    // Beds filter
     if (beds !== null && cfg.bedrooms && cfg.bedrooms !== 'Any') {
-      const wantedBeds = cfg.bedrooms === 'Studio' ? 0 : cfg.bedrooms === '4+' ? 4 : Number(cfg.bedrooms)
+      const want  = cfg.bedrooms === 'Studio' ? 0 : cfg.bedrooms === '4+' ? 4 : Number(cfg.bedrooms)
       const isMin = cfg.bedrooms === '4+'
-      if (!isMin && beds !== wantedBeds) continue
-      if (isMin && beds < wantedBeds) continue
+      if (!isMin && beds !== want) continue
+      if (isMin && beds < want) continue
     }
 
-    const source = sourceLabel(r.link)
     const bedsText = beds !== null ? bedsLabel(beds) : ''
-    const bathsText = baths !== null ? `${baths}ba` : ''
-    const specParts = [bedsText, bathsText].filter(Boolean)
-    const spec = specParts.length ? ` (${specParts.join(' · ')})` : ''
-    const priceStr = price ? `$${price.toLocaleString()}/mo` : null
+    const bathsText = baths ? `${baths}ba` : ''
+    const spec = [bedsText, bathsText].filter(Boolean).join(' · ')
 
-    const title = r.title
-      ? r.title.replace(/\s*[-|·]\s*(Zillow|Redfin|Apartments\.com|Realtor\.com|Trulia|Rentals\.com|HotPads|Rent\.com).*/i, '').trim()
-      : `${spec} listing — ${city}`.trim()
+    const cleanTitle = (r.title ?? '')
+      .replace(/\s*[-|·]\s*(Zillow|Redfin|Apartments\.com|Realtor\.com|Trulia|Rentals\.com|HotPads|Rent\.com|Movoto|Homes\.com|LoopNet|Crexi).*/i, '')
+      .trim() || `${cfg.propertyType ?? 'Home'} ${lt === 'Buy' ? 'for sale' : lt === 'Lease' ? 'for lease' : 'for rent'} — ${city}`
+
+    const titleHasBeds = /\d\s*(br|bed)/i.test(cleanTitle)
+    const displayTitle = spec && !titleHasBeds ? `${cleanTitle} (${spec})` : cleanTitle
 
     results.push({
-      title: `${title}${spec && !title.toLowerCase().includes('br') && !title.toLowerCase().includes('bed') ? spec : ''}`,
-      value: priceStr ?? undefined,
+      title: displayTitle,
+      value: price ? formatPrice(price, lt) : undefined,
       url: r.link,
       metadata: {
-        agentType: 'rental-listing-monitor',
-        source,
+        agentType:    'rental-listing-monitor',
+        listingType:  lt,
+        source:       sourceLabel(r.link, lt),
         city,
-        price: price ?? undefined,
-        bedrooms: beds ?? undefined,
-        bathrooms: baths ?? undefined,
-        snippet: r.snippet,
+        price:        price ?? undefined,
+        bedrooms:     beds ?? undefined,
+        bathrooms:    baths ?? undefined,
         propertyType: cfg.propertyType,
+        snippet:      r.snippet,
       },
     })
 
     if (results.length >= 15) break
   }
 
-  log.info('rental-monitor', 'run complete', { found: results.length })
+  log.info('real-estate', 'run complete', { found: results.length, listingType: lt })
   return results
 }
