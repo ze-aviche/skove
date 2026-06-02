@@ -55,32 +55,33 @@ export async function tailorResume(
 ): Promise<TailoredResumeResult> {
   const message = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 2048,
+    max_tokens: 4096,
     messages: [{
       role: 'user',
-      content: `You are a professional resume writer. Rewrite the resume below to be tailored for the specific job listing.
+      content: `You are a professional resume writer. Tailor the resume below for the specific job listing.
 
-Rules:
-- Keep all facts true — do not invent experience, skills, or credentials
-- Reorder and emphasise the most relevant experience and skills for this role
-- Weave in keywords from the job description naturally
-- Keep the same sections (Contact, Summary, Experience, Education, Skills) in that order
-- Use plain text only — no markdown, no bullet symbols, just dashes (-) for bullets
-- Separate each major section with a blank line
-- Start each section with the section name in ALL CAPS on its own line
-- Format experience items as: "Job Title at Company (Date Range)" then bullet lines starting with "- "
+STRICT RULES — follow exactly:
+1. Copy every job title, company name, and date range from the original resume VERBATIM — do not rename, reorder, add, or remove any past role
+2. Rewrite ONLY the bullet points under each role to highlight responsibilities and achievements most relevant to the target job
+3. Rewrite the Summary section to align with the target role
+4. Update the Skills section to lead with skills that match the job description; you may add keywords the candidate plausibly has based on their experience, but do not invent technologies or credentials not evidenced in the original
+5. Do NOT invent any experience, job titles, companies, dates, degrees, or certifications
+6. Plain text only — no markdown, no bold/italic; use dashes (-) for bullet points
+7. Separate each major section with a blank line
+8. Section headers in ALL CAPS on their own line
+9. Format each experience item as: "Job Title at Company (Date Range)" then bullet lines starting with "- "
 
 ORIGINAL RESUME:
-${resumeText.slice(0, 3000)}
+${resumeText.slice(0, 6000)}
 
 JOB LISTING:
 Title: ${job.title}
 Company: ${job.company}
 Location: ${job.location}
 ${job.salary ? `Salary: ${job.salary}` : ''}
-${job.description ? `Description: ${job.description.slice(0, 1000)}` : ''}
+${job.description ? `Description: ${job.description.slice(0, 1500)}` : ''}
 
-Return ONLY the rewritten resume text, nothing else.`,
+Return ONLY the tailored resume text, nothing else.`,
     }],
   })
 
