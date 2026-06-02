@@ -1,5 +1,5 @@
 import * as cron from 'node-cron'
-import { eq, and } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { clerkClient } from '@clerk/clerk-sdk-node'
 import { db } from '../db'
 import { agentInstances, agentDefinitions, agentResults, users } from '../db/schema'
@@ -10,6 +10,38 @@ import { log } from '../lib/logger'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const scheduledTasks = new Map<string, any>()
 
+// Maps human-readable frequency labels → cron expressions
+const FREQUENCY_CRON: Record<string, string> = {
+  'Every 30 minutes': '*/30 * * * *',
+  'Every 1 hour':     '0 */1 * * *',
+  'Every 2 hours':    '0 */2 * * *',
+  'Every 4 hours':    '0 */4 * * *',
+  'Every 6 hours':    '0 */6 * * *',
+  'Every 12 hours':   '0 */12 * * *',
+  'Daily':            '0 8 * * *',
+  'Twice daily':      '0 8,20 * * *',
+  'Every 2 days':     '0 8 */2 * *',
+  'Weekly':           '0 8 * * 1',
+}
+
+// Minutes between runs for nextRunAt estimation
+const FREQUENCY_MINUTES: Record<string, number> = {
+  'Every 30 minutes': 30,
+  'Every 1 hour':     60,
+  'Every 2 hours':    120,
+  'Every 4 hours':    240,
+  'Every 6 hours':    360,
+  'Every 12 hours':   720,
+  'Daily':            1440,
+  'Twice daily':      720,
+  'Every 2 days':     2880,
+  'Weekly':           10080,
+}
+
+export function frequencyToCron(frequency: string, fallback: string): string {
+  return FREQUENCY_CRON[frequency] ?? fallback
+}
+
 export async function startScheduler() {
   const rows = await db
     .select()
@@ -18,7 +50,10 @@ export async function startScheduler() {
     .where(eq(agentInstances.isActive, true))
 
   for (const row of rows) {
-    scheduleInstance(row.agent_instances.id, row.agent_definitions.schedule)
+    const config = (row.agent_instances.config ?? {}) as Record<string, unknown>
+    const freq = typeof config.frequency === 'string' ? config.frequency : null
+    const cronExpr = freq ? frequencyToCron(freq, row.agent_definitions.schedule) : row.agent_definitions.schedule
+    scheduleInstance(row.agent_instances.id, cronExpr)
   }
 
   // Morning digest — every day at 8am
@@ -96,7 +131,10 @@ export async function runInstance(instanceId: string) {
     })
   }
 
-  const nextRunAt = estimateNextRun(definition.schedule)
+  const instanceFreq = typeof (instance.config as Record<string, unknown>)?.frequency === 'string'
+    ? (instance.config as Record<string, unknown>).frequency as string
+    : null
+  const nextRunAt = estimateNextRun(instanceFreq, definition.schedule)
   await db
     .update(agentInstances)
     .set({ lastRunAt: new Date(), nextRunAt })
@@ -170,18 +208,25 @@ async function getUserEmail(userId: string): Promise<string | null> {
   }
 }
 
-function estimateNextRun(cronExpression: string): Date {
+function estimateNextRun(frequency: string | null, fallbackCron: string): Date {
   const next = new Date()
-  const parts = cronExpression.split(' ')
+
+  // Use frequency label if available — much more reliable than cron parsing
+  if (frequency && FREQUENCY_MINUTES[frequency]) {
+    next.setMinutes(next.getMinutes() + FREQUENCY_MINUTES[frequency])
+    return next
+  }
+
+  // Fallback: parse the definition's cron expression
+  const parts = fallbackCron.split(' ')
   const minutePart = parts[0]
   const hourPart = parts[1]
-
   if (minutePart.startsWith('*/')) {
     next.setMinutes(next.getMinutes() + parseInt(minutePart.slice(2)))
   } else if (hourPart?.startsWith('*/')) {
     next.setHours(next.getHours() + parseInt(hourPart.slice(2)))
   } else {
-    next.setHours(next.getHours() + 1)
+    next.setHours(next.getHours() + 24)
   }
   return next
 }

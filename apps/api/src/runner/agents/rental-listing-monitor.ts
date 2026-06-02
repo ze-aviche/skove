@@ -80,6 +80,36 @@ function bedsLabel(n: number): string {
   return n === 0 ? 'Studio' : `${n}BR`
 }
 
+// Terms that signal each property type in a result title/snippet
+const TYPE_SIGNALS: Record<string, string[]> = {
+  House:     ['house', 'home', 'single family', 'single-family'],
+  Apartment: ['apartment', 'apt', 'flat', 'unit'],
+  Condo:     ['condo', 'condominium'],
+  Townhouse: ['townhouse', 'townhome', 'town house', 'town home'],
+  Studio:    ['studio'],
+}
+
+// Terms that contradict the requested property type — used for query exclusions and result filtering
+const TYPE_EXCLUSIONS: Record<string, string[]> = {
+  House:     ['apartment', 'apartments', 'condo', 'condos', 'studio'],
+  Apartment: ['house', 'houses', 'single family', 'townhouse', 'townhome'],
+  Condo:     ['house', 'houses', 'single family', 'townhouse'],
+  Townhouse: ['apartment', 'apartments', 'condo', 'studio'],
+  Studio:    ['house', 'houses', 'single family', 'townhouse'],
+}
+
+// Returns true if the result title/snippet is compatible with the requested property type
+function matchesPropertyType(title: string, snippet: string, propertyType: string | undefined): boolean {
+  if (!propertyType || propertyType === 'Any') return true
+  const text = `${title} ${snippet}`.toLowerCase()
+  const exclusions = TYPE_EXCLUSIONS[propertyType] ?? []
+  // Reject if any exclusion term appears AND no signal for the wanted type appears
+  const hasExclusion = exclusions.some(t => text.includes(t))
+  if (!hasExclusion) return true
+  const signals = TYPE_SIGNALS[propertyType] ?? []
+  return signals.some(t => text.includes(t))
+}
+
 // Build the Google search query from config
 function buildQuery(cfg: RentalConfig): string {
   const parts: string[] = []
@@ -91,17 +121,31 @@ function buildQuery(cfg: RentalConfig): string {
     else parts.push(`${cfg.bedrooms} bedroom`)
   }
 
-  // Property type
+  // Property type — use specific term or generic "homes"
   if (cfg.propertyType && cfg.propertyType !== 'Any') {
-    parts.push(cfg.propertyType.toLowerCase())
+    const typeQuery: Record<string, string> = {
+      House: 'house',
+      Apartment: 'apartment',
+      Condo: 'condo',
+      Townhouse: 'townhouse',
+      Studio: 'studio apartment',
+    }
+    parts.push(typeQuery[cfg.propertyType] ?? 'home')
   } else {
-    parts.push('apartment')
+    parts.push('homes')
   }
 
   parts.push('for rent')
 
   // City
   if (cfg.city) parts.push(`"${cfg.city}"`)
+
+  // Negative keywords: exclude contradicting property types from results
+  const exclusions = cfg.propertyType ? TYPE_EXCLUSIONS[cfg.propertyType] : null
+  if (exclusions?.length) {
+    // Add the first two as -term exclusions (Google supports this)
+    exclusions.slice(0, 2).forEach(e => parts.push(`-${e}`))
+  }
 
   // Price range
   if (cfg.minRent && cfg.maxRent) parts.push(`$${cfg.minRent}-$${cfg.maxRent}`)
@@ -187,6 +231,9 @@ export async function runRentalListingMonitor(
     const urlKey = r.link.split('?')[0] // strip query params
     if (ctx.seenKeys.has(urlKey) || seen.has(urlKey)) continue
     seen.add(urlKey)
+
+    // Drop results that contradict the requested property type
+    if (!matchesPropertyType(r.title ?? '', r.snippet ?? '', cfg.propertyType)) continue
 
     const text = `${r.title ?? ''} ${r.snippet ?? ''}`
     const price = extractPrice(text)

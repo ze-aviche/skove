@@ -5,7 +5,7 @@ import { agentInstances, agentDefinitions, users, agentResults } from '../db/sch
 import { eq } from 'drizzle-orm'
 import { requireAuth } from '../lib/auth'
 import { z } from 'zod'
-import { scheduleInstance, unscheduleInstance, runInstance } from '../runner/scheduler'
+import { scheduleInstance, unscheduleInstance, runInstance, frequencyToCron } from '../runner/scheduler'
 import { log } from '../lib/logger'
 import { PLANS } from '../lib/stripe'
 
@@ -92,7 +92,9 @@ agentsRouter.post('/deploy', requireAuth, async (req, res) => {
     // Look up the agent's schedule and schedule it immediately
     const [definition] = await db.select().from(agentDefinitions).where(eq(agentDefinitions.id, body.data.agentId))
     if (definition) {
-      scheduleInstance(instance.id, definition.schedule)
+      const freq = typeof body.data.config.frequency === 'string' ? body.data.config.frequency : null
+      const cronExpr = freq ? frequencyToCron(freq, definition.schedule) : definition.schedule
+      scheduleInstance(instance.id, cronExpr)
     }
 
     // Run immediately on first deploy — don't make user wait for the first cron tick
@@ -124,7 +126,13 @@ agentsRouter.patch('/:id/toggle', requireAuth, async (req, res) => {
 
     if (nowActive) {
       const [definition] = await db.select().from(agentDefinitions).where(eq(agentDefinitions.id, instance[0].agentId))
-      if (definition) scheduleInstance(updated.id, definition.schedule)
+      if (definition) {
+        const freq = typeof (instance[0].config as Record<string, unknown>)?.frequency === 'string'
+          ? (instance[0].config as Record<string, unknown>).frequency as string
+          : null
+        const cronExpr = freq ? frequencyToCron(freq, definition.schedule) : definition.schedule
+        scheduleInstance(updated.id, cronExpr)
+      }
     } else {
       unscheduleInstance(updated.id)
     }
@@ -157,6 +165,20 @@ agentsRouter.patch('/:id/config', requireAuth, async (req, res) => {
       .set({ config: body.data.config })
       .where(eq(agentInstances.id, req.params.id))
       .returning()
+
+    // Reschedule if frequency changed and agent is active
+    const oldFreq = (instance[0].config as Record<string, unknown>)?.frequency
+    const newFreq = body.data.config.frequency
+    if (instance[0].isActive && oldFreq !== newFreq) {
+      unscheduleInstance(req.params.id)
+      const [definition] = await db.select().from(agentDefinitions).where(eq(agentDefinitions.id, instance[0].agentId))
+      if (definition) {
+        const freq = typeof newFreq === 'string' ? newFreq : null
+        const cronExpr = freq ? frequencyToCron(freq, definition.schedule) : definition.schedule
+        scheduleInstance(updated.id, cronExpr)
+      }
+    }
+
     res.json(updated)
   } catch (err) {
     log.error('api', 'PATCH /api/agents/:id/config failed', err, { instanceId: req.params.id, userId: req.userId })
