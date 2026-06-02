@@ -95,6 +95,11 @@ agentsRouter.post('/deploy', requireAuth, async (req, res) => {
       scheduleInstance(instance.id, definition.schedule)
     }
 
+    // Run immediately on first deploy — don't make user wait for the first cron tick
+    runInstance(instance.id).catch((err) =>
+      log.error('api', 'initial run after deploy failed', err, { instanceId: instance.id, userId: req.userId })
+    )
+
     res.json(instance)
   } catch (err) {
     log.error('api', 'POST /api/agents/deploy failed', err, { userId: req.userId })
@@ -166,8 +171,11 @@ agentsRouter.post('/:id/run', requireAuth, async (req, res) => {
     if (!instance || instance.userId !== req.userId) {
       return res.status(404).json({ error: 'Agent not found' })
     }
-    const results = await runInstance(req.params.id)
-    res.json({ ran: true, results })
+    // Respond immediately so navigating away doesn't cancel the run
+    res.json({ ran: true, queued: true })
+    runInstance(req.params.id).catch((err) =>
+      log.error('api', 'background run failed', err, { instanceId: req.params.id, userId: req.userId })
+    )
   } catch (err) {
     log.error('api', 'POST /api/agents/:id/run failed', err, { instanceId: req.params.id, userId: req.userId })
     res.status(500).json({ error: err instanceof Error ? err.message : 'Run failed' })

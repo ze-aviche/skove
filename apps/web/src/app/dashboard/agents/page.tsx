@@ -364,9 +364,9 @@ export default function AgentsPage() {
                   setRunningIds((prev) => new Set(prev).add(a.id))
                   try {
                     const token = await auth.getToken()
-                    const { results } = await runAgent(a.id, token)
+                    await runAgent(a.id, token)
                     showToast({
-                      message: results.length > 0 ? `Agent ran — ${results.length} result(s) found` : 'Agent ran — no new results',
+                      message: 'Agent started — results will appear shortly',
                       variant: 'success',
                     })
                     window.dispatchEvent(new CustomEvent('agents:changed'))
