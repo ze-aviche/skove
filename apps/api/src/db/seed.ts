@@ -37,11 +37,14 @@ const builtInAgents = [
   {
     id: 'rental-listing-monitor',
     name: 'Rental listing monitor',
-    description: 'Tracks rental listings that match your budget and location preferences.',
+    description: 'Tracks rental listings on Zillow, Realtor.com and more that match your criteria.',
     configSchema: {
-      city: { type: 'string', label: 'City or neighborhood', required: true, placeholder: 'Allen, TX' },
-      maxRent: { type: 'number', label: 'Max rent ($)', required: true, placeholder: '1800' },
-      bedrooms: { type: 'select', label: 'Bedrooms', options: ['Studio', '1BR', '2BR', '3BR+'] },
+      city: { type: 'city', label: 'City', required: true, placeholder: 'Austin, TX' },
+      propertyType: { type: 'select', label: 'Property type', required: false, options: ['Any', 'Apartment', 'House', 'Condo', 'Townhouse', 'Studio'] },
+      minRent: { type: 'number', label: 'Min rent ($/mo)', required: false, placeholder: '800' },
+      maxRent: { type: 'number', label: 'Max rent ($/mo)', required: false, placeholder: '2500' },
+      bedrooms: { type: 'select', label: 'Bedrooms', required: false, options: ['Any', 'Studio', '1', '2', '3', '4+'] },
+      bathrooms: { type: 'select', label: 'Bathrooms', required: false, options: ['Any', '1', '1.5', '2', '3+'] },
       petsAllowed: { type: 'boolean', label: 'Pet friendly only', required: false },
     },
     schedule: '0 */6 * * *',

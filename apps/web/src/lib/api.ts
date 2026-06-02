@@ -23,7 +23,7 @@ async function fetchJson<T>(path: string, options: RequestInit = {}): Promise<T>
 }
 
 export type AgentConfigField = {
-  type: 'string' | 'number' | 'select' | 'boolean' | 'date' | 'airport'
+  type: 'string' | 'number' | 'select' | 'boolean' | 'date' | 'airport' | 'city'
   label: string
   required?: boolean
   placeholder?: string

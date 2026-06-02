@@ -1,6 +1,7 @@
 'use client'
 
 import AirportPicker from './AirportPicker'
+import CityPicker from './CityPicker'
 import DatePicker from './DatePicker'
 import { AgentConfigField } from '@/lib/api'
 
@@ -55,6 +56,16 @@ export default function ConfigField({ fieldKey, field, value, onChange }: Props)
   if (field.type === 'airport') {
     return (
       <AirportPicker
+        value={String(value ?? '')}
+        onChange={(v) => onChange(fieldKey, v)}
+        placeholder={field.placeholder}
+      />
+    )
+  }
+
+  if (field.type === 'city') {
+    return (
+      <CityPicker
         value={String(value ?? '')}
         onChange={(v) => onChange(fieldKey, v)}
         placeholder={field.placeholder}

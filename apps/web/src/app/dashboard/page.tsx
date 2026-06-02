@@ -22,7 +22,15 @@ function getInstanceLabel(agentId: string, config: Record<string, unknown>): str
       if (config.jobTitle) return config.location ? `${config.jobTitle} · ${config.location}` : String(config.jobTitle)
       break
     case 'rental-listing-monitor':
-      if (config.city) return `${config.city}${config.maxRent ? ` · max $${config.maxRent}` : ''}`
+      if (config.city) {
+        const parts: string[] = [String(config.city)]
+        if (config.bedrooms && config.bedrooms !== 'Any') parts.push(`${config.bedrooms}BR`)
+        if (config.propertyType && config.propertyType !== 'Any') parts.push(String(config.propertyType))
+        if (config.minRent && config.maxRent) parts.push(`$${config.minRent}–$${config.maxRent}`)
+        else if (config.maxRent) parts.push(`max $${config.maxRent}`)
+        else if (config.minRent) parts.push(`from $${config.minRent}`)
+        return parts.join(' · ')
+      }
       break
     case 'stock-price-alert':
       if (config.symbol) return `${config.symbol}${config.targetPrice ? ` · below $${config.targetPrice}` : ''}`
