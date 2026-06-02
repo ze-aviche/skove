@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
-import { getResults, markResultRead, AgentResult } from '@/lib/api'
+import { getResults, markResultRead, downloadDocument, AgentResult } from '@/lib/api'
 
 type Tab = 'All' | 'Unread' | 'Flights' | 'Jobs' | 'Rentals' | 'Stocks' | 'News'
 
@@ -36,13 +36,36 @@ function matchesTab(r: AgentResult, tab: Tab): boolean {
   return false
 }
 
+function slugify(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().replace(/\s+/g, '_').slice(0, 40)
+}
+
 export default function ResultsPage() {
   const [results, setResults] = useState<AgentResult[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('All')
+  const [downloading, setDownloading] = useState<string | null>(null)
   const auth = useAuth()
   const { showToast } = useToast()
+
+  const handleDownload = async (r: AgentResult, type: 'resume' | 'cover', format: 'pdf' | 'docx') => {
+    const key = `${r.id}-${type}-${format}`
+    setDownloading(key)
+    try {
+      const token = await auth.getToken()
+      const meta = (r.metadata ?? {}) as Record<string, unknown>
+      const jobTitle = typeof meta.jobTitle === 'string' ? meta.jobTitle : 'position'
+      const company = typeof meta.company === 'string' ? meta.company : 'company'
+      const slug = slugify(`${jobTitle}_${company}`)
+      const prefix = type === 'cover' ? 'cover_letter' : 'resume'
+      await downloadDocument(r.id, type, format, `${prefix}_${slug}.${format}`, token)
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'Download failed', variant: 'error' })
+    } finally {
+      setDownloading(null)
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -192,6 +215,36 @@ export default function ResultsPage() {
                       textDecoration: 'none',
                     }}>{urlLabel(r)}</a>
                   )}
+                  {agentType(r).includes('job') && (() => {
+                    const meta = (r.metadata ?? {}) as Record<string, unknown>
+                    const hasResume = !!meta.tailoredResumeText
+                    const hasCover = !!meta.coverLetter
+                    if (!hasResume && !hasCover) return null
+                    return (
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        {hasResume && (
+                          <>
+                            <button onClick={() => handleDownload(r, 'resume', 'pdf')} disabled={!!downloading} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-3)', color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                              {downloading === `${r.id}-resume-pdf` ? '…' : 'CV PDF'}
+                            </button>
+                            <button onClick={() => handleDownload(r, 'resume', 'docx')} disabled={!!downloading} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-3)', color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                              {downloading === `${r.id}-resume-docx` ? '…' : 'CV Word'}
+                            </button>
+                          </>
+                        )}
+                        {hasCover && (
+                          <>
+                            <button onClick={() => handleDownload(r, 'cover', 'pdf')} disabled={!!downloading} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-3)', color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                              {downloading === `${r.id}-cover-pdf` ? '…' : 'CL PDF'}
+                            </button>
+                            <button onClick={() => handleDownload(r, 'cover', 'docx')} disabled={!!downloading} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-3)', color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                              {downloading === `${r.id}-cover-docx` ? '…' : 'CL Word'}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )
+                  })()}
                   {!r.isRead && (
                     <button onClick={async () => {
                       try {

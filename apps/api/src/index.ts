@@ -10,6 +10,7 @@ import { webhooksRouter } from './routes/webhooks'
 import { resumeRouter } from './routes/resume'
 import { billingRouter } from './routes/billing'
 import { adminRouter } from './routes/admin'
+import { downloadRouter } from './routes/download'
 import { startScheduler } from './runner/scheduler'
 import { log } from './lib/logger'
 
@@ -39,6 +40,7 @@ app.use('/api/webhooks', webhooksRouter)
 app.use('/api/resume', resumeRouter)
 app.use('/api/billing', billingRouter)
 app.use('/api/admin', adminRouter)
+app.use('/api/download', downloadRouter)
 
 app.listen(PORT, () => {
   log.info('api', 'server started', { port: PORT })

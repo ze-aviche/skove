@@ -1,6 +1,6 @@
 import { AgentRunResult } from './flight-watcher'
 import { RunnerContext } from './index'
-import { scoreJobMatch } from '../../lib/claude'
+import { scoreJobMatch, tailorResume } from '../../lib/claude'
 import { db } from '../../db'
 import { users } from '../../db/schema'
 import { eq } from 'drizzle-orm'
@@ -214,9 +214,26 @@ export async function runJobApplicationTracker(
         log.info('job-tracker', 'claude score', { title: job.title, company: job.company, score: match.score, threshold: matchThreshold, userId: ctx.userId })
 
         if (match.score >= matchThreshold) {
+          let tailoredResumeText: string | undefined
+          try {
+            const tailored = await tailorResume(resumeText, {
+              title: job.title, company: job.company,
+              location: job.location, description: job.description, salary,
+            })
+            tailoredResumeText = tailored.tailoredText
+            log.info('job-tracker', 'resume tailored', { title: job.title, company: job.company, userId: ctx.userId })
+          } catch (err) {
+            log.error('job-tracker', 'resume tailoring failed', err, { jobId: job.id })
+          }
           results.push({
             ...baseResult,
-            metadata: { ...baseResult.metadata, matchScore: match.score, matchReasoning: match.reasoning, coverLetter: match.coverLetter },
+            metadata: {
+              ...baseResult.metadata,
+              matchScore: match.score,
+              matchReasoning: match.reasoning,
+              coverLetter: match.coverLetter,
+              tailoredResumeText,
+            },
           })
         }
       } catch (err) {
