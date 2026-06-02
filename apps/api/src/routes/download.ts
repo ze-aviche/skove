@@ -1,6 +1,7 @@
 import { Router } from 'express'
+import { clerkClient } from '@clerk/clerk-sdk-node'
 import { db } from '../db'
-import { agentResults, users } from '../db/schema'
+import { agentResults } from '../db/schema'
 import { eq } from 'drizzle-orm'
 import { requireAuth } from '../lib/auth'
 import { log } from '../lib/logger'
@@ -37,9 +38,15 @@ downloadRouter.get('/:resultId', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'No tailored resume available for this result' })
     }
 
-    // Fetch candidate name from users table
-    const [userRow] = await db.select({ email: users.email }).from(users).where(eq(users.id, req.userId!))
-    const candidateName = userRow?.email?.split('@')[0]?.replace(/[._]/g, ' ') ?? 'Candidate'
+    // Fetch candidate name from Clerk profile
+    let candidateName = 'Candidate'
+    try {
+      const clerkUser = await clerkClient.users.getUser(req.userId!)
+      const first = clerkUser.firstName ?? ''
+      const last = clerkUser.lastName ?? ''
+      const full = `${first} ${last}`.trim()
+      if (full) candidateName = full
+    } catch { /* non-fatal — fall back to default */ }
 
     const positionSlug = slugify(`${jobTitle}_${company}`)
     const prefix = docType === 'cover' ? 'cover_letter' : 'resume'
