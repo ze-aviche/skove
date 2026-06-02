@@ -134,7 +134,12 @@ export default function AgentsPage() {
     return Object.fromEntries(
       Object.entries(configSchema).map(([key, field]) => {
         if (field.type === 'boolean') return [key, false]
-        if (field.type === 'select') return [key, field.options?.[0] ?? '']
+        if (field.type === 'select') {
+          const recommended = field.placeholder && field.options?.includes(field.placeholder)
+            ? field.placeholder
+            : field.options?.[0] ?? ''
+          return [key, recommended]
+        }
         return [key, '']
       })
     ) as Record<string, unknown>

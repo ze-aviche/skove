@@ -20,7 +20,13 @@ const getInitialConfig = (configSchema: Record<string, AgentConfigField>) => {
   return Object.fromEntries(
     Object.entries(configSchema).map(([key, field]) => {
       if (field.type === 'boolean') return [key, false]
-      if (field.type === 'select') return [key, field.options?.[0] ?? '']
+      if (field.type === 'select') {
+        // Use placeholder as default when it matches one of the options (signals the recommended value)
+        const recommended = field.placeholder && field.options?.includes(field.placeholder)
+          ? field.placeholder
+          : field.options?.[0] ?? ''
+        return [key, recommended]
+      }
       return [key, '']
     })
   ) as Record<string, unknown>
