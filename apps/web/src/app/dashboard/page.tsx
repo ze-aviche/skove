@@ -13,6 +13,27 @@ const iconMap: Record<string, string> = {
   'keyword-news-monitor': '📰',
 }
 
+function getInstanceLabel(agentId: string, config: Record<string, unknown>): string | null {
+  switch (agentId) {
+    case 'flight-watcher':
+      if (config.origin && config.destination) return `${config.origin} → ${config.destination}`
+      break
+    case 'job-application-tracker':
+      if (config.jobTitle) return config.location ? `${config.jobTitle} · ${config.location}` : String(config.jobTitle)
+      break
+    case 'rental-listing-monitor':
+      if (config.city) return `${config.city}${config.maxRent ? ` · max $${config.maxRent}` : ''}`
+      break
+    case 'stock-price-alert':
+      if (config.symbol) return `${config.symbol}${config.targetPrice ? ` · below $${config.targetPrice}` : ''}`
+      break
+    case 'keyword-news-monitor':
+      if (config.keyword) return `"${config.keyword}"`
+      break
+  }
+  return null
+}
+
 export default function DashboardPage() {
   const [agents, setAgents] = useState<AgentInstance[]>([])
   const [definitions, setDefinitions] = useState<Record<string, AgentDefinition>>({})
@@ -101,6 +122,7 @@ export default function DashboardPage() {
       id: agent.id,
       icon: iconMap[agent.agentId] ?? '🤖',
       name: def?.name ?? agent.agentId,
+      label: getInstanceLabel(agent.agentId, (agent.config ?? {}) as Record<string, unknown>),
       desc: def?.description ?? 'Deployed agent instance',
       status: agent.isActive ? 'live' : 'paused',
       statusText: agent.isActive ? 'Running' : 'Paused',
@@ -179,7 +201,20 @@ export default function DashboardPage() {
                         fontSize: 18, flexShrink: 0,
                       }}>{agent.icon}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 2 }}>{agent.name}</div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', marginBottom: agent.label ? 4 : 2 }}>{agent.name}</div>
+                        {agent.label && (
+                          <div style={{
+                            fontSize: 11, fontWeight: 500,
+                            color: 'var(--text-primary)',
+                            background: 'var(--surface-3)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 6,
+                            padding: '2px 8px',
+                            display: 'inline-block',
+                            marginBottom: 4,
+                            fontFamily: 'var(--font-mono)',
+                          }}>{agent.label}</div>
+                        )}
                         <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{agent.desc}</div>
                       </div>
                       <span style={{
