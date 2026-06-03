@@ -82,12 +82,11 @@ adminRouter.get('/users', requireAuth, requireAdmin, async (req, res) => {
       }
     }
 
-    // Delete DB rows for users that no longer exist in Clerk
+    // Log orphaned DB users (deleted from Clerk but not yet from DB)
+    // These are excluded from the response; delete them via the admin Del button
     for (const dbUser of dbUsers) {
       if (!clerkIds.has(dbUser.id)) {
-        await db.delete(users).where(eq(users.id, dbUser.id))
-        dbMap.delete(dbUser.id)
-        log.info('admin', 'orphaned DB user deleted (not in Clerk)', { userId: dbUser.id })
+        log.warn('admin', 'orphaned DB user (not in Clerk) — delete via admin page', { userId: dbUser.id, email: dbUser.email })
       }
     }
 
