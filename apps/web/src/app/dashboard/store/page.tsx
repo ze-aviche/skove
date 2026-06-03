@@ -123,7 +123,7 @@ export default async function AgentStorePage() {
           </div>
         ))}
 
-        {/* Submit your own */}
+        {/* Build your own — coming soon */}
         <div style={{
           background: 'var(--surface-2)',
           border: '1px dashed var(--border)',
@@ -136,23 +136,24 @@ export default async function AgentStorePage() {
           gap: 10,
           textAlign: 'center',
           minHeight: 180,
+          opacity: 0.6,
+          position: 'relative',
+          userSelect: 'none',
         }}>
-          <div style={{ fontSize: 28 }}>🛠️</div>
+          <div style={{ fontSize: 28 }}>🔒</div>
           <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>Build your own agent</div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4, maxWidth: 180 }}>
             Use the Skove SDK to build and publish agents for the marketplace
           </div>
-          <a href="https://github.com/ze-aviche/skove/blob/main/docs/agent-submission.md"
-            target="_blank"
-            style={{
-              fontSize: 12, fontWeight: 500,
-              padding: '6px 16px', borderRadius: 8,
-              border: '1px solid var(--border)',
-              background: 'var(--surface-3)',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-              textDecoration: 'none',
-            }}>Read the docs →</a>
+          <span style={{
+            fontSize: 10, fontWeight: 600,
+            padding: '3px 10px', borderRadius: 99,
+            background: 'var(--surface-3)',
+            color: 'var(--text-tertiary)',
+            border: '1px solid var(--border)',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+          }}>Coming soon</span>
         </div>
       </div>
     </div>
