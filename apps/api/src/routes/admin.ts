@@ -20,19 +20,34 @@ function requireAdmin(req: any, res: any, next: any) {
   next()
 }
 
+async function fetchAllClerkUsers() {
+  const pageSize = 500
+  const allUsers: Awaited<ReturnType<typeof clerkClient.users.getUser>>[] = []
+  let offset = 0
+  while (true) {
+    const page = await clerkClient.users.getUserList({ limit: pageSize, offset })
+    allUsers.push(...(page as any))
+    if ((page as any).length < pageSize) break
+    offset += pageSize
+  }
+  return allUsers
+}
+
 // GET /api/admin/stats
 adminRouter.get('/stats', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const [totalUsers] = await db.select({ count: sql<number>`count(*)` }).from(users)
-    const [totalAgents] = await db.select({ count: sql<number>`count(*)` }).from(agentInstances)
-    const [totalResults] = await db.select({ count: sql<number>`count(*)` }).from(agentResults)
-    const [proUsers] = await db.select({ count: sql<number>`count(*)` }).from(users).where(eq(users.plan, 'pro'))
+    const [clerkUsers, totalAgents, totalResults, proUsers] = await Promise.all([
+      fetchAllClerkUsers(),
+      db.select({ count: sql<number>`count(*)` }).from(agentInstances).then(r => Number(r[0].count)),
+      db.select({ count: sql<number>`count(*)` }).from(agentResults).then(r => Number(r[0].count)),
+      db.select({ count: sql<number>`count(*)` }).from(users).where(eq(users.plan, 'pro')).then(r => Number(r[0].count)),
+    ])
 
     res.json({
-      totalUsers: Number(totalUsers.count),
-      totalAgents: Number(totalAgents.count),
-      totalResults: Number(totalResults.count),
-      proUsers: Number(proUsers.count),
+      totalUsers: clerkUsers.length,
+      totalAgents,
+      totalResults,
+      proUsers,
     })
   } catch (err) {
     log.error('admin', 'GET /api/admin/stats failed', err)
@@ -40,33 +55,67 @@ adminRouter.get('/stats', requireAuth, requireAdmin, async (req, res) => {
   }
 })
 
-// GET /api/admin/users — list all users with agent + result counts
+// GET /api/admin/users — reconcile Clerk (source of truth) with DB, then return merged list
 adminRouter.get('/users', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const allUsers = await db.select().from(users).orderBy(users.createdAt)
+    const [clerkUsers, dbUsers] = await Promise.all([
+      fetchAllClerkUsers(),
+      db.select().from(users),
+    ])
 
-    const agentCounts = await db
-      .select({ userId: agentInstances.userId, count: sql<number>`count(*)` })
-      .from(agentInstances)
-      .groupBy(agentInstances.userId)
+    const clerkIds = new Set(clerkUsers.map((u: any) => u.id))
+    const dbMap = new Map(dbUsers.map(u => [u.id, u]))
 
-    const resultCounts = await db
-      .select({ userId: agentResults.userId, count: sql<number>`count(*)` })
-      .from(agentResults)
-      .groupBy(agentResults.userId)
+    // Upsert any Clerk user missing from DB, and fix stale emails
+    for (const cu of clerkUsers) {
+      const email: string = (cu as any).emailAddresses?.[0]?.emailAddress ?? ''
+      if (!email) continue
+      const existing = dbMap.get((cu as any).id)
+      if (!existing) {
+        const [inserted] = await db.insert(users).values({ id: (cu as any).id, email }).returning()
+        dbMap.set((cu as any).id, inserted)
+        log.info('admin', 'user auto-created in DB from Clerk', { userId: (cu as any).id })
+      } else if (existing.email !== email) {
+        await db.update(users).set({ email }).where(eq(users.id, (cu as any).id))
+        existing.email = email
+        log.info('admin', 'user email synced from Clerk', { userId: (cu as any).id })
+      }
+    }
+
+    // Delete DB rows for users that no longer exist in Clerk
+    for (const dbUser of dbUsers) {
+      if (!clerkIds.has(dbUser.id)) {
+        await db.delete(users).where(eq(users.id, dbUser.id))
+        dbMap.delete(dbUser.id)
+        log.info('admin', 'orphaned DB user deleted (not in Clerk)', { userId: dbUser.id })
+      }
+    }
+
+    const [agentCounts, resultCounts] = await Promise.all([
+      db.select({ userId: agentInstances.userId, count: sql<number>`count(*)` }).from(agentInstances).groupBy(agentInstances.userId),
+      db.select({ userId: agentResults.userId, count: sql<number>`count(*)` }).from(agentResults).groupBy(agentResults.userId),
+    ])
 
     const agentMap = Object.fromEntries(agentCounts.map(r => [r.userId, Number(r.count)]))
     const resultMap = Object.fromEntries(resultCounts.map(r => [r.userId, Number(r.count)]))
 
-    res.json(allUsers.map(u => ({
-      id: u.id,
-      email: u.email,
-      plan: u.plan,
-      agentCount: agentMap[u.id] ?? 0,
-      resultCount: resultMap[u.id] ?? 0,
-      createdAt: u.createdAt,
-      planExpiresAt: u.planExpiresAt,
-    })))
+    const result = clerkUsers
+      .map((cu: any) => {
+        const u = dbMap.get(cu.id)
+        if (!u) return null
+        return {
+          id: u.id,
+          email: u.email,
+          plan: u.plan,
+          agentCount: agentMap[u.id] ?? 0,
+          resultCount: resultMap[u.id] ?? 0,
+          createdAt: u.createdAt,
+          planExpiresAt: u.planExpiresAt,
+        }
+      })
+      .filter(Boolean)
+
+    res.json(result)
   } catch (err) {
     log.error('admin', 'GET /api/admin/users failed', err)
     res.status(500).json({ error: 'Failed to fetch users' })

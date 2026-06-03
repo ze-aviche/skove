@@ -61,11 +61,9 @@ agentsRouter.post('/deploy', requireAuth, async (req, res) => {
     // Ensure user row exists with a real email address
     const existingUser = await db.select().from(users).where(eq(users.id, req.userId!))
     if (!existingUser[0]) {
-      let email = req.userId! // fallback
-      try {
-        const clerkUser = await clerkClient.users.getUser(req.userId!)
-        email = clerkUser.emailAddresses[0]?.emailAddress ?? req.userId!
-      } catch { /* non-fatal — proceed with fallback */ }
+      const clerkUser = await clerkClient.users.getUser(req.userId!)
+      const email = clerkUser.emailAddresses[0]?.emailAddress
+      if (!email) return res.status(500).json({ error: 'Could not resolve user email from Clerk' })
       await db.insert(users).values({ id: req.userId!, email })
     }
 

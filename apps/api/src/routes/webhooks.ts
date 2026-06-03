@@ -79,7 +79,12 @@ webhooksRouter.post('/clerk', async (req, res) => {
 
   if (type === 'user.created' || type === 'user.updated') {
     const userId: string = data.id
-    const email: string = data.email_addresses?.[0]?.email_address ?? userId
+    const email: string | undefined = data.email_addresses?.[0]?.email_address
+
+    if (!email) {
+      log.warn('webhook', 'clerk user has no email, skipping sync', { userId, event: type })
+      return res.json({ received: true })
+    }
 
     const existing = await db.select().from(users).where(eq(users.id, userId))
     if (existing[0]) {
@@ -89,6 +94,12 @@ webhooksRouter.post('/clerk', async (req, res) => {
     }
 
     log.info('webhook', 'user synced', { userId, email, event: type })
+  }
+
+  if (type === 'user.deleted') {
+    const userId: string = data.id
+    await db.delete(users).where(eq(users.id, userId))
+    log.info('webhook', 'user deleted via clerk webhook', { userId })
   }
 
   res.json({ received: true })
