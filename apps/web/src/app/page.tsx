@@ -1,7 +1,11 @@
 import Link from 'next/link'
 import { SignedIn, SignedOut } from '@clerk/nextjs'
+import { auth } from '@clerk/nextjs'
+import { redirect } from 'next/navigation'
 
 export default function HomePage() {
+  const { userId } = auth()
+  if (userId) redirect('/dashboard')
   return (
     <main className="min-h-screen bg-white">
       {/* Nav */}
