@@ -99,6 +99,14 @@ export default function SignUpPage() {
             afterSignUpUrl="/dashboard" afterSignInUrl="/dashboard"
             appearance={clerkLight}
           />
+
+          <p style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', marginTop: 16, lineHeight: 1.6 }}>
+            By creating an account you agree to our{' '}
+            <Link href="/terms" style={{ color: '#6b7280', textDecoration: 'underline' }}>Terms of Service</Link>
+            {' '}and{' '}
+            <Link href="/privacy" style={{ color: '#6b7280', textDecoration: 'underline' }}>Privacy Policy</Link>.
+            Skove is currently in beta — features may change.
+          </p>
         </div>
       </div>
     </div>
