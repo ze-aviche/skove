@@ -34,6 +34,12 @@ export default function BottomNav() {
     return () => window.removeEventListener('results:changed', handler)
   }, [])
 
+  // Poll every 60 s so the badge updates when a new agent result arrives
+  useEffect(() => {
+    const id = setInterval(fetchUnread, 60_000)
+    return () => clearInterval(id)
+  }, [])
+
   return (
     <nav className="bottom-nav">
       {navItems.map((item) => {

@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { db } from '../db'
 import { agentResults } from '../db/schema'
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, and, inArray } from 'drizzle-orm'
 import { requireAuth } from '../lib/auth'
 import { log } from '../lib/logger'
 
@@ -18,6 +18,42 @@ resultsRouter.get('/', requireAuth, async (req, res) => {
   } catch (err) {
     log.error('api', 'GET /api/results failed', err, { userId: req.userId })
     res.status(500).json({ error: 'Failed to fetch results' })
+  }
+})
+
+// DELETE /api/results/bulk — delete multiple results by id array
+resultsRouter.delete('/bulk', requireAuth, async (req, res) => {
+  const { ids } = req.body as { ids?: string[] }
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids must be a non-empty array' })
+  }
+  try {
+    await db.delete(agentResults).where(
+      and(
+        inArray(agentResults.id, ids),
+        eq(agentResults.userId, req.userId!)
+      )
+    )
+    log.info('api', 'bulk delete results', { count: ids.length, userId: req.userId })
+    res.json({ deleted: ids.length })
+  } catch (err) {
+    log.error('api', 'DELETE /api/results/bulk failed', err, { userId: req.userId })
+    res.status(500).json({ error: 'Failed to delete results' })
+  }
+})
+
+// DELETE /api/results/:id — delete a single result
+resultsRouter.delete('/:id', requireAuth, async (req, res) => {
+  try {
+    const [result] = await db.select().from(agentResults).where(eq(agentResults.id, req.params.id))
+    if (!result || result.userId !== req.userId) {
+      return res.status(404).json({ error: 'Result not found' })
+    }
+    await db.delete(agentResults).where(eq(agentResults.id, req.params.id))
+    res.json({ id: req.params.id })
+  } catch (err) {
+    log.error('api', 'DELETE /api/results/:id failed', err, { resultId: req.params.id, userId: req.userId })
+    res.status(500).json({ error: 'Failed to delete result' })
   }
 })
 

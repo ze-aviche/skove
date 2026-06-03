@@ -107,6 +107,21 @@ export function deleteAgent(instanceId: string, token?: string): Promise<{ id: s
   })
 }
 
+export function deleteResult(resultId: string, token?: string): Promise<{ id: string }> {
+  return fetchJson(`/api/results/${resultId}`, {
+    method: 'DELETE',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
+export function deleteResults(ids: string[], token?: string): Promise<{ deleted: number }> {
+  return fetchJson('/api/results/bulk', {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
 export function markResultRead(resultId: string, token?: string): Promise<AgentResult> {
   return fetchJson<AgentResult>(`/api/results/${resultId}/read`, {
     method: 'PATCH',

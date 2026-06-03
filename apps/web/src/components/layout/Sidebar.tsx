@@ -52,6 +52,12 @@ export default function Sidebar() {
     return () => window.removeEventListener('results:changed', handler)
   }, [])
 
+  // Poll every 60 s so the badge updates when a new agent result arrives
+  useEffect(() => {
+    const id = setInterval(fetchUnread, 60_000)
+    return () => clearInterval(id)
+  }, [])
+
   return (
     <aside style={{
       width: 'var(--sidebar-width)',

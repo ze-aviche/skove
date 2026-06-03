@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
-import { getResults, markResultRead, downloadDocument, AgentResult } from '@/lib/api'
+import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, AgentResult } from '@/lib/api'
 
 type Tab = 'All' | 'Unread' | 'Flights' | 'Jobs' | 'Rentals' | 'Stocks' | 'News'
 const TABS: Tab[] = ['All', 'Unread', 'Flights', 'Jobs', 'Rentals', 'Stocks', 'News']
@@ -62,6 +62,8 @@ export default function ResultsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('All')
   const [expandedCoverLetter, setExpandedCoverLetter] = useState<string | null>(null)
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [deleting, setDeleting] = useState(false)
   const auth = useAuth()
   const { showToast } = useToast()
 
@@ -115,6 +117,63 @@ export default function ResultsPage() {
       showToast({ message: `${unreadItems.length} result${unreadItems.length !== 1 ? 's' : ''} marked read`, variant: 'success' })
     } catch (err) {
       showToast({ message: err instanceof Error ? err.message : 'Failed to mark all read', variant: 'error' })
+    }
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every(r => selected.has(r.id))
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelected(prev => {
+        const next = new Set(prev)
+        filtered.forEach(r => next.delete(r.id))
+        return next
+      })
+    } else {
+      setSelected(prev => {
+        const next = new Set(prev)
+        filtered.forEach(r => next.add(r.id))
+        return next
+      })
+    }
+  }
+
+  const handleDeleteOne = async (id: string) => {
+    try {
+      const token = await auth.getToken()
+      await deleteResult(id, token)
+      setResults(prev => prev.filter(r => r.id !== id))
+      setSelected(prev => { const next = new Set(prev); next.delete(id); return next })
+      window.dispatchEvent(new CustomEvent('results:changed'))
+      showToast({ message: 'Result deleted', variant: 'success' })
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'Failed to delete', variant: 'error' })
+    }
+  }
+
+  const handleDeleteSelected = async () => {
+    const ids = Array.from(selected)
+    if (ids.length === 0) return
+    setDeleting(true)
+    try {
+      const token = await auth.getToken()
+      await deleteResults(ids, token)
+      setResults(prev => prev.filter(r => !selected.has(r.id)))
+      setSelected(new Set())
+      window.dispatchEvent(new CustomEvent('results:changed'))
+      showToast({ message: `${ids.length} result${ids.length !== 1 ? 's' : ''} deleted`, variant: 'success' })
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'Failed to delete', variant: 'error' })
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -176,6 +235,38 @@ export default function ResultsPage() {
         <div style={{ color: 'var(--text-secondary)' }}>No results yet. Deploy an agent to get started.</div>
       ) : (
         <>
+          {/* Select-all + bulk delete toolbar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={allFilteredSelected}
+                onChange={toggleSelectAll}
+                style={{ width: 15, height: 15, cursor: 'pointer', accentColor: 'var(--brand)' }}
+              />
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                {selected.size > 0 ? `${selected.size} selected` : 'Select all'}
+              </span>
+            </label>
+            {selected.size > 0 && (
+              <button
+                onClick={handleDeleteSelected}
+                disabled={deleting}
+                style={{
+                  fontSize: 12, fontWeight: 500,
+                  padding: '5px 12px', borderRadius: 7,
+                  border: '1px solid rgba(239,68,68,0.3)',
+                  background: 'rgba(239,68,68,0.08)',
+                  color: 'var(--red)',
+                  cursor: deleting ? 'not-allowed' : 'pointer',
+                  opacity: deleting ? 0.6 : 1,
+                }}
+              >
+                {deleting ? 'Deleting…' : `Delete ${selected.size}`}
+              </button>
+            )}
+          </div>
+
           <div className="tab-bar" style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'var(--surface-2)', borderRadius: 10, padding: 4, width: 'fit-content', maxWidth: '100%', border: '1px solid var(--border)' }}>
             {TABS.map((tab) => {
               const active = tab === activeTab
@@ -222,14 +313,20 @@ export default function ResultsPage() {
 
                 return (
                   <div key={r.id} style={{
-                    background: r.isRead ? 'var(--surface-1)' : 'var(--surface-2)',
-                    border: `1px solid ${r.isRead ? 'var(--border)' : 'var(--border-hover)'}`,
+                    background: selected.has(r.id) ? 'var(--brand-dim)' : r.isRead ? 'var(--surface-1)' : 'var(--surface-2)',
+                    border: `1px solid ${selected.has(r.id) ? 'rgba(59,130,246,0.3)' : r.isRead ? 'var(--border)' : 'var(--border-hover)'}`,
                     borderRadius: 12,
                     padding: '14px 16px',
                     display: 'flex',
                     gap: 14,
                     alignItems: 'flex-start',
                   }}>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(r.id)}
+                      onChange={() => toggleSelect(r.id)}
+                      style={{ marginTop: 10, width: 15, height: 15, cursor: 'pointer', flexShrink: 0, accentColor: 'var(--brand)' }}
+                    />
                     <div style={{
                       width: 36, height: 36, borderRadius: 10,
                       background: 'var(--surface-3)',
@@ -347,6 +444,17 @@ export default function ResultsPage() {
                           cursor: 'pointer',
                         }}>Mark read</button>
                       )}
+                      <button
+                        onClick={() => handleDeleteOne(r.id)}
+                        title="Delete result"
+                        style={{
+                          fontSize: 11, fontWeight: 500,
+                          padding: '5px 10px', borderRadius: 7,
+                          border: '1px solid rgba(239,68,68,0.25)',
+                          background: 'transparent',
+                          color: 'var(--red)',
+                          cursor: 'pointer',
+                        }}>Delete</button>
                     </div>
                   </div>
                 )
