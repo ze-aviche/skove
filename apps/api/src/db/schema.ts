@@ -77,3 +77,14 @@ export const atsQueryCaches = pgTable('ats_query_caches', {
   lastRefreshedAt: timestamp('last_refreshed_at').defaultNow().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
+
+export const atsCompanies = pgTable('ats_companies', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  careersUrl: text('careers_url'),
+  atsType: text('ats_type').notNull(),
+  atsIdentifier: text('ats_identifier').notNull(),
+  isEnabled: boolean('is_enabled').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})

@@ -2,7 +2,7 @@
 import { RunnerContext } from './index'
 import { scoreJobMatch, tailorResume } from '../../lib/claude'
 import { db } from '../../db'
-import { users, atsJobs, atsQueryCaches, atsCompanies } from '../../db/schema'
+import { users, atsJobs, atsQueryCaches } from '../../db/schema'
 import { and, desc, eq, lt, or, sql, SQL } from 'drizzle-orm'
 import { createHash } from 'crypto'
 import { log } from '../../lib/logger'
@@ -13,12 +13,14 @@ interface JobTrackerConfig {
   minSalary?: number | string
   keywords?: string
   atsCompanies?: string
+<<<<<<< HEAD
+=======
   atsFirstOnly?: boolean
+>>>>>>> ff8b2903ab770c911b9e5241dbef08958da2cc0d
   matchThreshold?: number | string
 }
 
-type ATSProviderType = 'lever' | 'greenhouse' | 'ashby' | 'custom'
-
+// Normalised job shape from any source
 interface NormalisedJob {
   id: string
   title: string
@@ -32,45 +34,11 @@ interface NormalisedJob {
   source: string
 }
 
-const ATS_REFRESH_MS = 1000 * 60 * 60 // 1 hour
-const ATS_RETENTION_MS = 1000 * 60 * 60 * 24 * 14 // 14 days
-
-const defaultATSCompanies = [
-  'amazon',
-  'google',
-  'microsoft',
-  'meta',
-  'apple',
-  'salesforce',
-  'uber',
-  'airbnb',
-  'stripe',
-  'twitter',
-]
-
-const providerCompanyAliases: Record<string, Record<'lever' | 'greenhouse' | 'ashby', string>> = {
-  facebook: { lever: 'meta', greenhouse: 'meta', ashby: 'meta' },
-  meta: { lever: 'meta', greenhouse: 'meta', ashby: 'meta' },
-}
-
-function normalizeText(value?: string) {
-  return String(value ?? '').trim().toLowerCase()
-}
-
-function displayCompanyName(company: string) {
-  const normalized = normalizeText(company)
-  if (normalized === 'meta') return 'Meta'
-  return normalized
-    .split(/[-\s]+/)
-    .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
-    .join(' ')
-}
-
 function formatSalary(min?: number, max?: number): string | undefined {
   if (!min && !max) return undefined
   const lo = min ? `$${Math.round(min / 1000)}k` : null
   const hi = max ? `$${Math.round(max / 1000)}k` : null
-  if (lo && hi && lo !== hi) return `${lo}-${hi}`
+  if (lo && hi && lo !== hi) return `${lo}ΓÇô${hi}`
   return lo ?? hi ?? undefined
 }
 
@@ -81,6 +49,8 @@ function postedLabel(iso: string): string {
   if (days < 7) return `${days} days ago`
   return `${Math.floor(days / 7)} weeks ago`
 }
+
+// ΓöÇΓöÇ Source 1: Adzuna ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 async function fetchAdzuna(what: string, where: string, minSalary: number): Promise<NormalisedJob[]> {
   const appId = process.env.ADZUNA_APP_ID
@@ -115,6 +85,8 @@ async function fetchAdzuna(what: string, where: string, minSalary: number): Prom
   }))
 }
 
+// ΓöÇΓöÇ Source 2: JSearch (LinkedIn + Indeed + Glassdoor) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
 async function fetchJSearch(query: string): Promise<NormalisedJob[]> {
   const apiKey = process.env.RAPIDAPI_KEY
   if (!apiKey) return []
@@ -145,6 +117,8 @@ async function fetchJSearch(query: string): Promise<NormalisedJob[]> {
   }))
 }
 
+// ΓöÇΓöÇ Source 3: RemoteOK (free, no key needed) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
 async function fetchRemoteOK(jobTitle: string): Promise<NormalisedJob[]> {
   const tag = jobTitle.toLowerCase().replace(/\s+/g, '-')
   const res = await fetch(`https://remoteok.com/api?tag=${encodeURIComponent(tag)}`, {
@@ -170,6 +144,23 @@ async function fetchRemoteOK(jobTitle: string): Promise<NormalisedJob[]> {
     }))
 }
 
+const defaultATSCompanies = [
+  'amazon',
+  'google',
+  'microsoft',
+  'facebook',
+  'apple',
+  'salesforce',
+  'uber',
+  'airbnb',
+  'stripe',
+  'twitter',
+]
+
+function normalizeText(value?: string) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
 function matchText(value: string, search: string) {
   return search.length === 0 || value.includes(search)
 }
@@ -182,6 +173,25 @@ function matchLocation(value: string, location: string, isRemote: boolean) {
   return location.length === 0 || normalized.includes(location)
 }
 
+<<<<<<< HEAD
+async function fetchLeverJobs(jobTitle: string, location: string, companies: string[]): Promise<NormalisedJob[]> {
+=======
+const ATS_REFRESH_MS = 1000 * 60 * 60 // 1 hour
+const ATS_RETENTION_MS = 1000 * 60 * 60 * 24 * 14 // 14 days
+
+async function cleanupOldATSCache(): Promise<void> {
+  const threshold = new Date(Date.now() - ATS_RETENTION_MS)
+  await db.delete(atsJobs).where(lt(atsJobs.createdAt, threshold))
+  await db.delete(atsQueryCaches).where(lt(atsQueryCaches.lastRefreshedAt, threshold))
+}
+
+function normalizeCompanies(companies: string[]): string[] {
+  return (companies.length > 0 ? companies : defaultATSCompanies)
+    .map(normalizeText)
+    .filter(Boolean)
+    .sort()
+}
+
 function buildQueryKey(queryText: string, location: string, companies: string[], minSalary: number): string {
   const normalized = JSON.stringify({
     queryText: normalizeText(queryText),
@@ -192,14 +202,27 @@ function buildQueryKey(queryText: string, location: string, companies: string[],
   return createHash('sha256').update(normalized).digest('hex')
 }
 
-function normalizeCompanies(companies: string[]) {
-  return Array.from(new Set((companies.length > 0 ? companies : defaultATSCompanies).map(normalizeText))).sort()
-}
+function buildATSCacheConditions(jobTitle: string, location: string, companies: string[], minSalary: number): SQL[] {
+  const normalizedTitle = normalizeText(jobTitle)
+  const normalizedLocation = normalizeText(location)
+  const organizations = normalizeCompanies(companies)
 
-async function cleanupOldATSCache(): Promise<void> {
-  const threshold = new Date(Date.now() - ATS_RETENTION_MS)
-  await db.delete(atsJobs).where(lt(atsJobs.createdAt, threshold))
-  await db.delete(atsQueryCaches).where(lt(atsQueryCaches.lastRefreshedAt, threshold))
+  const conditions: SQL[] = []
+  if (normalizedTitle) conditions.push(sql`${atsJobs.titleSearch} ILIKE ${`%${normalizedTitle}%`}`)
+  if (normalizedLocation) {
+    if (location.toLowerCase().includes('remote')) {
+      conditions.push(sql`${atsJobs.locationSearch} ILIKE ${'%remote%'}`)
+    } else {
+      conditions.push(sql`${atsJobs.locationSearch} ILIKE ${`%${normalizedLocation}%`}`)
+    }
+  }
+  if (organizations.length > 0) {
+    conditions.push(or(...organizations.map((company) => sql`${atsJobs.companySearch} ILIKE ${`%${company}%`}`)))
+  }
+  if (minSalary > 0) {
+    conditions.push(sql`(${atsJobs.salaryMin} IS NULL OR ${atsJobs.salaryMin} >= ${minSalary})`)
+  }
+  return conditions
 }
 
 async function getATSQueryCache(queryText: string, location: string, companies: string[], minSalary: number) {
@@ -229,76 +252,135 @@ async function upsertATSQueryCache(queryText: string, location: string, companie
   })
 }
 
-async function fetchATSCompanyRows(requestedCompanies: string[]) {
-  const normalizedRequested = requestedCompanies.map(normalizeText).filter(Boolean)
-  const rows = await db.select().from(atsCompanies).where(eq(atsCompanies.isEnabled, true))
-  if (normalizedRequested.length === 0) return rows
-  return rows.filter((row) => normalizedRequested.includes(normalizeText(row.name)) || normalizedRequested.includes(normalizeText(row.atsIdentifier)))
+async function fetchStoredATSJobs(jobTitle: string, location: string, companies: string[], minSalary: number): Promise<NormalisedJob[]> {
+  const conditions = buildATSCacheConditions(jobTitle, location, companies, minSalary)
+
+  const rows = await (conditions.length > 0
+    ? db.select().from(atsJobs).where(and(...conditions)).orderBy(desc(atsJobs.createdAt)).limit(20)
+    : db.select().from(atsJobs).orderBy(desc(atsJobs.createdAt)).limit(20))
+
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    company: row.company,
+    location: row.location,
+    applyUrl: row.applyUrl,
+    salaryMin: row.salaryMin ?? undefined,
+    salaryMax: row.salaryMax ?? undefined,
+    description: row.description ?? undefined,
+    postedAt: row.postedAt,
+    source: row.source,
+  }))
 }
 
-type ATSCompanyRow = {
-  id: string
-  name: string
-  careersUrl?: string | null
-  atsType: string
-  atsIdentifier: string
-}
-
-function getRawRowFromName(company: string, als?: ATSProviderType): ATSCompanyRow {
-  return {
-    id: company,
-    name: company,
-    atsType: als ?? 'lever',
-    atsIdentifier: getProviderCompanySlug(company, 'lever'),
-    careersUrl: null,
+async function persistATSJobs(jobs: NormalisedJob[]): Promise<void> {
+  for (const job of jobs) {
+    await db.insert(atsJobs).values({
+      source: job.source,
+      externalId: job.id,
+      applyUrl: job.applyUrl,
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      salaryMin: job.salaryMin ?? null,
+      salaryMax: job.salaryMax ?? null,
+      description: job.description ?? null,
+      postedAt: job.postedAt,
+      metadata: { source: job.source },
+      titleSearch: normalizeText(job.title),
+      companySearch: normalizeText(job.company),
+      locationSearch: normalizeText(job.location),
+    }).onConflictDoUpdate({
+      target: atsJobs.applyUrl,
+      set: {
+        source: job.source,
+        externalId: job.id,
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        salaryMin: job.salaryMin ?? null,
+        salaryMax: job.salaryMax ?? null,
+        description: job.description ?? null,
+        postedAt: job.postedAt,
+        metadata: { source: job.source },
+        titleSearch: normalizeText(job.title),
+        companySearch: normalizeText(job.company),
+        locationSearch: normalizeText(job.location),
+      },
+    })
   }
 }
 
-function getProviderCompanySlug(company: string, provider: 'lever' | 'greenhouse' | 'ashby') {
-  const normalized = normalizeText(company)
-  return providerCompanyAliases[normalized]?.[provider] ?? normalized
-}
-
-async function fetchLeverJobs(jobTitle: string, location: string, minSalary: number, companies: Array<{ name: string; atsIdentifier: string }>): Promise<NormalisedJob[]> {
+async function fetchLeverJobs(jobTitle: string, location: string, minSalary: number, companies: string[]): Promise<NormalisedJob[]> {
+>>>>>>> ff8b2903ab770c911b9e5241dbef08958da2cc0d
   const query = normalizeText(jobTitle)
   const isRemote = location.includes('remote')
   const results: NormalisedJob[] = []
 
   const promises = companies.map(async (company) => {
-    const url = `https://api.lever.co/v0/postings/${company.atsIdentifier}?mode=json`
-    try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'skove-agent/1.0' } })
-      if (!res.ok) {
-        log.warn('job-tracker', 'lever fetch failed', { company: company.name, providerId: company.atsIdentifier, status: res.status, url })
-        return []
-      }
-      const data = await res.json() as Array<Record<string, any>>
-      const filtered = (data ?? [])
-        .filter((job) => {
-          const title = normalizeText(job.text)
-          const locationText = normalizeText(job.categories?.location)
-          const salary = job.salary_min ?? job.salaryMin ?? null
-          const meetsSalary = salary == null || salary >= minSalary
-          return matchText(title, query) && matchLocation(locationText, location, isRemote) && meetsSalary
-        })
-        .slice(0, 6)
+    const url = `https://api.lever.co/v0/postings/${company}?mode=json`
+<<<<<<< HEAD
+    const res = await fetch(url, { headers: { 'User-Agent': 'skove-agent/1.0' } })
+    if (!res.ok) return []
+    const data = await res.json() as Array<Record<string, any>>
 
-      return filtered.map((job) => ({
-        id: `lever-${company.atsIdentifier}-${job.id}`,
+    return data
+      .filter((job) => {
+        const title = normalizeText(job.text)
+        const locationText = normalizeText(job.categories?.location)
+        return matchText(title, query) && matchLocation(locationText, location, isRemote)
+      })
+      .slice(0, 6)
+      .map((job) => ({
+        id: `lever-${company}-${job.id}`,
         title: job.text,
-        company: displayCompanyName(company.name),
+        company: company.charAt(0).toUpperCase() + company.slice(1),
         location: job.categories?.location ?? 'Remote',
-        applyUrl: job.hostedUrl ?? `https://jobs.lever.co/${company.atsIdentifier}/${job.id}`,
+        applyUrl: job.hostedUrl ?? `https://jobs.lever.co/${company}/${job.id}`,
         salaryMin: undefined,
         salaryMax: undefined,
         description: job.description || job.notes,
         postedAt: job.postedAt || new Date().toISOString(),
         source: 'Lever ATS',
       }))
-    } catch (err) {
-      log.error('job-tracker', 'lever fetch error', err, { company: company.name, providerId: company.atsIdentifier, url })
-      return []
-    }
+=======
+      try {
+        const res = await fetch(url, { headers: { 'User-Agent': 'skove-agent/1.0' } })
+        if (!res.ok) {
+          log.warn('job-tracker', 'lever fetch failed', { company, status: res.status })
+          return []
+        }
+        const data = await res.json() as Array<Record<string, any>>
+
+        const filtered = (data ?? [])
+          .filter((job) => {
+            const title = normalizeText(job.text)
+            const locationText = normalizeText(job.categories?.location)
+            const salary = job.salary_min ?? job.salaryMin ?? null
+            const meetsSalary = salary == null || salary >= minSalary
+            return matchText(title, query) && matchLocation(locationText, location, isRemote) && meetsSalary
+          })
+          .slice(0, 6)
+
+        log.info('job-tracker', 'lever fetch complete', { company, count: filtered.length })
+
+        return filtered.map((job) => ({
+          id: `lever-${company}-${job.id}`,
+          title: job.text,
+          company: company.charAt(0).toUpperCase() + company.slice(1),
+          location: job.categories?.location ?? 'Remote',
+          applyUrl: job.hostedUrl ?? `https://jobs.lever.co/${company}/${job.id}`,
+          salaryMin: undefined,
+          salaryMax: undefined,
+          description: job.description || job.notes,
+          postedAt: job.postedAt || new Date().toISOString(),
+          source: 'Lever ATS',
+        }))
+      } catch (err) {
+        log.error('job-tracker', 'lever fetch error', err, { company })
+        return []
+      }
+>>>>>>> ff8b2903ab770c911b9e5241dbef08958da2cc0d
   })
 
   const settled = await Promise.allSettled(promises)
@@ -308,20 +390,39 @@ async function fetchLeverJobs(jobTitle: string, location: string, minSalary: num
   return results
 }
 
-async function fetchGreenhouseJobs(jobTitle: string, location: string, minSalary: number, companies: Array<{ name: string; atsIdentifier: string }>): Promise<NormalisedJob[]> {
+<<<<<<< HEAD
+async function fetchGreenhouseJobs(jobTitle: string, location: string, companies: string[]): Promise<NormalisedJob[]> {
+=======
+async function fetchGreenhouseJobs(jobTitle: string, location: string, minSalary: number, companies: string[]): Promise<NormalisedJob[]> {
+>>>>>>> ff8b2903ab770c911b9e5241dbef08958da2cc0d
   const query = normalizeText(jobTitle)
   const isRemote = location.includes('remote')
   const results: NormalisedJob[] = []
 
   const promises = companies.map(async (company) => {
-    const url = `https://boards-api.greenhouse.io/v1/boards/${company.atsIdentifier}/jobs?content=true`
+    const url = `https://boards-api.greenhouse.io/v1/boards/${company}/jobs?content=true`
+<<<<<<< HEAD
+    const res = await fetch(url, { headers: { 'User-Agent': 'skove-agent/1.0' } })
+    if (!res.ok) return []
+    const data = await res.json() as { jobs?: Array<Record<string, any>> }
+
+    return (data.jobs ?? [])
+      .filter((job) => {
+        const title = normalizeText(job.title)
+        const locationText = normalizeText(job.location?.name)
+        return matchText(title, query) && matchLocation(locationText, location, isRemote)
+      })
+      .slice(0, 6)
+      .map((job) => ({
+=======
     try {
       const res = await fetch(url, { headers: { 'User-Agent': 'skove-agent/1.0' } })
       if (!res.ok) {
-        log.warn('job-tracker', 'greenhouse fetch failed', { company: company.name, providerId: company.atsIdentifier, status: res.status, url })
+        log.warn('job-tracker', 'greenhouse fetch failed', { company, status: res.status })
         return []
       }
       const data = await res.json() as { jobs?: Array<Record<string, any>> }
+
       const filtered = (data.jobs ?? [])
         .filter((job) => {
           const title = normalizeText(job.title)
@@ -332,22 +433,28 @@ async function fetchGreenhouseJobs(jobTitle: string, location: string, minSalary
         })
         .slice(0, 6)
 
+      log.info('job-tracker', 'greenhouse fetch complete', { company, count: filtered.length })
+
       return filtered.map((job) => ({
-        id: `greenhouse-${company.atsIdentifier}-${job.id}`,
+>>>>>>> ff8b2903ab770c911b9e5241dbef08958da2cc0d
+        id: `greenhouse-${company}-${job.id}`,
         title: job.title,
-        company: displayCompanyName(company.name),
+        company: company.charAt(0).toUpperCase() + company.slice(1),
         location: job.location?.name ?? 'Remote',
-        applyUrl: `https://boards.greenhouse.io/${company.atsIdentifier}/jobs/${job.id}`,
+        applyUrl: `https://boards.greenhouse.io/${company}/jobs/${job.id}`,
         salaryMin: undefined,
         salaryMax: undefined,
         description: job.contents,
         postedAt: job.updated_at || new Date().toISOString(),
         source: 'Greenhouse ATS',
       }))
+<<<<<<< HEAD
+=======
     } catch (err) {
-      log.error('job-tracker', 'greenhouse fetch error', err, { company: company.name, providerId: company.atsIdentifier, url })
+      log.error('job-tracker', 'greenhouse fetch error', err, { company })
       return []
     }
+>>>>>>> ff8b2903ab770c911b9e5241dbef08958da2cc0d
   })
 
   const settled = await Promise.allSettled(promises)
@@ -357,7 +464,11 @@ async function fetchGreenhouseJobs(jobTitle: string, location: string, minSalary
   return results
 }
 
-async function fetchAshbyJobs(jobTitle: string, location: string, minSalary: number, companies: Array<{ name: string; atsIdentifier: string }>): Promise<NormalisedJob[]> {
+<<<<<<< HEAD
+async function fetchAshbyJobs(jobTitle: string, location: string, companies: string[]): Promise<NormalisedJob[]> {
+=======
+async function fetchAshbyJobs(jobTitle: string, location: string, minSalary: number, companies: string[]): Promise<NormalisedJob[]> {
+>>>>>>> ff8b2903ab770c911b9e5241dbef08958da2cc0d
   const query = normalizeText(jobTitle)
   const isRemote = location.includes('remote')
   const results: NormalisedJob[] = []
@@ -365,23 +476,55 @@ async function fetchAshbyJobs(jobTitle: string, location: string, minSalary: num
   const baseUrl = process.env.ASHBY_API_URL ?? 'https://api.ashbyhq.com/v1'
 
   const promises = companies.map(async (company) => {
-    const url = apiKey
-      ? `${baseUrl}/companies/${company.atsIdentifier}/jobs`
-      : `https://boards.ashbyhq.com/${company.atsIdentifier}/jobs.json`
-    try {
-      const res = await fetch(url, {
-        headers: apiKey
-          ? { Authorization: `Bearer ${apiKey}`, 'User-Agent': 'skove-agent/1.0' }
-          : { 'User-Agent': 'skove-agent/1.0' },
-      })
-      if (!res.ok) {
-        log.warn('job-tracker', 'ashby fetch failed', { company: company.name, providerId: company.atsIdentifier, status: res.status, url })
-        return []
-      }
+<<<<<<< HEAD
+    let data: Array<Record<string, any>> = []
+    if (apiKey) {
+      const url = `${baseUrl}/companies/${company}/jobs`
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}`, 'User-Agent': 'skove-agent/1.0' } })
+      if (!res.ok) return []
       const json = await res.json()
-      const data = json.data ?? json.jobs ?? json.results ?? json
-      const filtered = (data ?? [])
-        .filter((job: any) => {
+      data = json.data ?? json.jobs ?? json.results ?? []
+    } else {
+      const url = `https://boards.ashbyhq.com/${company}/jobs.json`
+      const res = await fetch(url, { headers: { 'User-Agent': 'skove-agent/1.0' } })
+      if (!res.ok) return []
+      const json = await res.json()
+      data = json.jobs ?? json.results ?? json
+    }
+
+    return data
+      .filter((job) => {
+        const title = normalizeText(job.title ?? job.text ?? job.name)
+        const locationText = normalizeText(job.location?.name ?? job.location)
+        return matchText(title, query) && matchLocation(locationText, location, isRemote)
+      })
+      .slice(0, 6)
+      .map((job) => ({
+=======
+    try {
+      let data: Array<Record<string, any>> = []
+      if (apiKey) {
+        const url = `${baseUrl}/companies/${company}/jobs`
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}`, 'User-Agent': 'skove-agent/1.0' } })
+        if (!res.ok) {
+          log.warn('job-tracker', 'ashby fetch failed', { company, status: res.status })
+          return []
+        }
+        const json = await res.json()
+        data = json.data ?? json.jobs ?? json.results ?? []
+      } else {
+        const url = `https://boards.ashbyhq.com/${company}/jobs.json`
+        const res = await fetch(url, { headers: { 'User-Agent': 'skove-agent/1.0' } })
+        if (!res.ok) {
+          log.warn('job-tracker', 'ashby fetch failed', { company, status: res.status })
+          return []
+        }
+        const json = await res.json()
+        data = json.jobs ?? json.results ?? json
+      }
+
+      const filtered = data
+        .filter((job) => {
           const title = normalizeText(job.title ?? job.text ?? job.name)
           const locationText = normalizeText(job.location?.name ?? job.location)
           const salary = job.salaryMin ?? job.salary_min ?? null
@@ -390,22 +533,28 @@ async function fetchAshbyJobs(jobTitle: string, location: string, minSalary: num
         })
         .slice(0, 6)
 
-      return filtered.map((job: any) => ({
-        id: `ashby-${company.atsIdentifier}-${job.id ?? job.uuid ?? Math.random()}`,
+      log.info('job-tracker', 'ashby fetch complete', { company, count: filtered.length })
+
+      return filtered.map((job) => ({
+>>>>>>> ff8b2903ab770c911b9e5241dbef08958da2cc0d
+        id: `ashby-${company}-${job.id ?? job.uuid ?? Math.random()}`,
         title: job.title ?? job.text ?? job.name,
-        company: displayCompanyName(company.name),
+        company: company.charAt(0).toUpperCase() + company.slice(1),
         location: job.location?.name ?? job.location ?? 'Remote',
-        applyUrl: job.applyUrl ?? job.url ?? job.hostedUrl ?? `https://boards.ashbyhq.com/${company.atsIdentifier}`,
+        applyUrl: job.applyUrl ?? job.url ?? job.hostedUrl ?? `https://boards.ashbyhq.com/${company}`,
         salaryMin: job.salaryMin ?? job.salary_min,
         salaryMax: job.salaryMax ?? job.salary_max,
         description: job.description ?? job.notes,
         postedAt: job.updatedAt || job.postedAt || job.createdAt || new Date().toISOString(),
         source: 'Ashby ATS',
       }))
+<<<<<<< HEAD
+=======
     } catch (err) {
-      log.error('job-tracker', 'ashby fetch error', err, { company: company.name, providerId: company.atsIdentifier, url })
+      log.error('job-tracker', 'ashby fetch error', err, { company })
       return []
     }
+>>>>>>> ff8b2903ab770c911b9e5241dbef08958da2cc0d
   })
 
   const settled = await Promise.allSettled(promises)
@@ -415,109 +564,31 @@ async function fetchAshbyJobs(jobTitle: string, location: string, minSalary: num
   return results
 }
 
-async function fetchATSJobsForCompanyRows(jobTitle: string, location: string, minSalary: number, rows: ATSCompanyRow[]): Promise<NormalisedJob[]> {
-  const leverCompanies = rows.filter((row) => row.atsType === 'lever').map((row) => ({ name: row.name, atsIdentifier: row.atsIdentifier }))
-  const greenhouseCompanies = rows.filter((row) => row.atsType === 'greenhouse').map((row) => ({ name: row.name, atsIdentifier: row.atsIdentifier }))
-  const ashbyCompanies = rows.filter((row) => row.atsType === 'ashby').map((row) => ({ name: row.name, atsIdentifier: row.atsIdentifier }))
-
-  const results: NormalisedJob[] = []
-  if (leverCompanies.length > 0) {
-    results.push(...await fetchLeverJobs(jobTitle, location, minSalary, leverCompanies))
-  }
-  if (greenhouseCompanies.length > 0) {
-    results.push(...await fetchGreenhouseJobs(jobTitle, location, minSalary, greenhouseCompanies))
-  }
-  if (ashbyCompanies.length > 0) {
-    results.push(...await fetchAshbyJobs(jobTitle, location, minSalary, ashbyCompanies))
-  }
-  return results.slice(0, 20)
-}
-
-async function fetchATSJobsLegacy(jobTitle: string, location: string, minSalary: number, companies: string[]): Promise<NormalisedJob[]> {
-  const rawAccounts = companies.map((company) => ({
-    name: company,
-    atsIdentifier: getProviderCompanySlug(company, 'lever'),
-  }))
+async function fetchATSJobs(jobTitle: string, location: string, minSalary: number, companies: string[]): Promise<NormalisedJob[]> {
+  const organizations = companies.length > 0 ? companies : defaultATSCompanies
   const [leverResults, greenhouseResults, ashbyResults] = await Promise.all([
-    fetchLeverJobs(jobTitle, location, minSalary, rawAccounts),
-    fetchGreenhouseJobs(jobTitle, location, minSalary, rawAccounts),
-    fetchAshbyJobs(jobTitle, location, minSalary, rawAccounts),
+<<<<<<< HEAD
+    fetchLeverJobs(jobTitle, location, organizations),
+    fetchGreenhouseJobs(jobTitle, location, organizations),
+    fetchAshbyJobs(jobTitle, location, organizations),
   ])
 
   return [...leverResults, ...greenhouseResults, ...ashbyResults].slice(0, 20)
-}
+=======
+    fetchLeverJobs(jobTitle, location, minSalary, organizations),
+    fetchGreenhouseJobs(jobTitle, location, minSalary, organizations),
+    fetchAshbyJobs(jobTitle, location, minSalary, organizations),
+  ])
 
-async function persistATSJobs(jobs: NormalisedJob[]): Promise<void> {
-  if (jobs.length === 0) return
-
-  const now = new Date()
-  const rows = jobs.map((job) => ({
-    source: job.source,
-    externalId: job.id,
-    applyUrl: job.applyUrl,
-    title: job.title,
-    company: job.company,
-    location: job.location,
-    salaryMin: job.salaryMin,
-    salaryMax: job.salaryMax,
-    description: job.description,
-    postedAt: job.postedAt,
-    metadata: { source: job.source },
-    titleSearch: normalizeText(job.title),
-    companySearch: normalizeText(job.company),
-    locationSearch: normalizeText(job.location),
-    createdAt: now,
-  }))
-
-  await db.insert(atsJobs).values(rows).onConflictDoNothing({ target: atsJobs.applyUrl })
-}
-
-async function fetchStoredATSJobs(queryText: string, location: string, companies: string[], minSalary: number): Promise<NormalisedJob[]> {
-  const searchText = `%${normalizeText(queryText)}%`
-  const locationText = `%${normalizeText(location)}%`
-
-  const rows = await db.select().from(atsJobs).where(
-    and(
-      sql`${atsJobs.titleSearch} like ${searchText}`,
-      sql`${atsJobs.locationSearch} like ${locationText}`
-    )
-  )
-
-  return rows
-    .filter((job) => {
-      if (minSalary > 0 && job.salaryMin != null && job.salaryMin < minSalary) {
-        return false
-      }
-      if (companies.length === 0) return true
-      const normalizedCompanies = normalizeCompanies(companies)
-      return normalizedCompanies.some((company) => normalizeText(job.company).includes(company))
-    })
-    .map((job) => ({
-      id: job.externalId ?? job.id,
-      title: job.title,
-      company: job.company,
-      location: job.location,
-      applyUrl: job.applyUrl,
-      salaryMin: job.salaryMin ?? undefined,
-      salaryMax: job.salaryMax ?? undefined,
-      description: job.description ?? undefined,
-      postedAt: job.postedAt,
-      source: job.source,
-    }))
-}
-
-async function fetchATSJobs(jobTitle: string, location: string, minSalary: number, requestedCompanies: string[]): Promise<NormalisedJob[]> {
-  const companyRows = await fetchATSCompanyRows(requestedCompanies)
-  if (companyRows.length > 0) {
-    return fetchATSJobsForCompanyRows(jobTitle, location, minSalary, companyRows)
+  const results = [...leverResults, ...greenhouseResults, ...ashbyResults].slice(0, 20)
+  if (results.length > 0) {
+    await persistATSJobs(results)
   }
-
-  const fallbackCompanies = requestedCompanies.length > 0 ? requestedCompanies : defaultATSCompanies
-  if (requestedCompanies.length > 0) {
-    log.warn('job-tracker', 'no ats company DB records found, falling back to raw company names', { requestedCompanies })
-  }
-  return fetchATSJobsLegacy(jobTitle, location, minSalary, fallbackCompanies)
+  return results
+>>>>>>> ff8b2903ab770c911b9e5241dbef08958da2cc0d
 }
+
+// ΓöÇΓöÇ Main runner ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 export async function runJobApplicationTracker(
   config: Record<string, unknown>,
@@ -528,10 +599,14 @@ export async function runJobApplicationTracker(
   const location = String(c.location || 'Remote')
   const minSalary = Number(c.minSalary) || 0
   const keywords = c.keywords ? String(c.keywords) : ''
-  const atsCompanies = c.atsCompanies ? String(c.atsCompanies).split(',').map(normalizeText).filter(Boolean) : []
+  const atsCompanies = c.atsCompanies ? String(c.atsCompanies).split(',').map((company) => company.trim()).filter(Boolean) : []
+<<<<<<< HEAD
+=======
   const atsFirstOnly = Boolean(c.atsFirstOnly)
+>>>>>>> ff8b2903ab770c911b9e5241dbef08958da2cc0d
   const matchThreshold = Number(c.matchThreshold) || 7
 
+  // Fetch user resume
   const [user] = await db.select({ resumeText: users.resumeText }).from(users).where(eq(users.id, ctx.userId))
   const resumeText = user?.resumeText ?? null
 
@@ -541,8 +616,19 @@ export async function runJobApplicationTracker(
   const what = [jobTitle, keywords].filter(Boolean).join(' ')
   const where = isRemote ? 'remote' : location
 
+<<<<<<< HEAD
+  // ATS-first chain: direct company ATS feeds are primary; search APIs are fallback.
+  let jobs: NormalisedJob[] = await fetchATSJobs(what, where, minSalary, atsCompanies)
+  log.info('job-tracker', 'ats fetch complete', { count: jobs.length, companies: atsCompanies.length ? atsCompanies : defaultATSCompanies })
+
+  if (jobs.length === 0) {
+    jobs = await fetchAdzuna(what, where, minSalary)
+    log.info('job-tracker', 'adzuna fetch complete', { count: jobs.length })
+  }
+=======
   const cacheRow = await getATSQueryCache(what, where, atsCompanies, minSalary)
   let jobs: NormalisedJob[] = []
+>>>>>>> ff8b2903ab770c911b9e5241dbef08958da2cc0d
 
   if (cacheRow) {
     const ageMs = Date.now() - new Date(cacheRow.lastRefreshedAt).getTime()
@@ -553,7 +639,6 @@ export async function runJobApplicationTracker(
 
     if (!isFresh || jobs.length === 0) {
       const externalJobs = await fetchATSJobs(what, where, minSalary, atsCompanies)
-      await persistATSJobs(externalJobs)
       await upsertATSQueryCache(what, where, atsCompanies, minSalary)
       log.info('job-tracker', 'ats refresh fetch complete', { count: externalJobs.length, companies: atsCompanies.length ? atsCompanies : defaultATSCompanies, atsFirstOnly, ageMs })
 
@@ -565,7 +650,6 @@ export async function runJobApplicationTracker(
     }
   } else {
     const externalJobs = await fetchATSJobs(what, where, minSalary, atsCompanies)
-    await persistATSJobs(externalJobs)
     await upsertATSQueryCache(what, where, atsCompanies, minSalary)
     log.info('job-tracker', 'ats fetch on cache miss complete', { count: externalJobs.length, companies: atsCompanies.length ? atsCompanies : defaultATSCompanies, atsFirstOnly })
     jobs = externalJobs
