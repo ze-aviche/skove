@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, jsonb, boolean, uuid } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, jsonb, boolean, uuid, integer } from 'drizzle-orm/pg-core'
 
 // Users synced from Clerk
 export const users = pgTable('users', {
@@ -46,5 +46,34 @@ export const agentResults = pgTable('agent_results', {
   url: text('url'),
   metadata: jsonb('metadata'), // any extra data the agent wants to store
   isRead: boolean('is_read').default(false).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+export const atsJobs = pgTable('ats_jobs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  source: text('source').notNull(),
+  externalId: text('external_id'),
+  applyUrl: text('apply_url').notNull().unique(),
+  title: text('title').notNull(),
+  company: text('company').notNull(),
+  location: text('location').notNull(),
+  salaryMin: integer('salary_min'),
+  salaryMax: integer('salary_max'),
+  description: text('description'),
+  postedAt: text('posted_at').notNull(),
+  metadata: jsonb('metadata'),
+  titleSearch: text('title_search').notNull(),
+  companySearch: text('company_search').notNull(),
+  locationSearch: text('location_search').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
+export const atsQueryCaches = pgTable('ats_query_caches', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  queryKey: text('query_key').notNull().unique(),
+  queryText: text('query_text').notNull(),
+  location: text('location').notNull(),
+  companies: text('companies').notNull(),
+  lastRefreshedAt: timestamp('last_refreshed_at').defaultNow().notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
