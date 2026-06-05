@@ -23,12 +23,13 @@ const builtInAgents = [
   {
     id: 'job-application-tracker',
     name: 'Job application tracker',
-    description: 'Watches new job listings and manages applications for your target role.',
+    description: 'Watches new job listings and prioritizes ATS feeds first, with broad search APIs as fallback.',
     configSchema: {
       jobTitle: { type: 'string', label: 'Job title', required: true, placeholder: 'Product Manager' },
       location: { type: 'string', label: 'Location', required: true, placeholder: 'Remote / Austin, TX' },
       minSalary: { type: 'number', label: 'Minimum salary ($)', required: false },
       keywords: { type: 'string', label: 'Keywords', required: false, placeholder: 'PM, product, roadmap' },
+      atsCompanies: { type: 'string', label: 'ATS companies (comma-separated)', required: false, placeholder: 'Amazon, Google, Salesforce' },
       matchThreshold: { type: 'number', label: 'Min AI match score (1–10)', required: false, placeholder: '7' },
       frequency: { type: 'select', label: 'Check frequency', required: false, options: ['Every 6 hours', 'Every 12 hours', 'Daily'], placeholder: 'Every 12 hours' },
     },
