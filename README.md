@@ -75,6 +75,8 @@ This starts:
 
 Any developer can build and publish an agent to the Skove marketplace. See [packages/sdk/README.md](packages/sdk/README.md) for the full spec.
 
+For implementation details, cache behavior, and log search strings for the job tracker ATS flow, see [docs/ats-job-tracker.md](docs/ats-job-tracker.md).
+
 A minimal agent looks like this:
 
 ```typescript
