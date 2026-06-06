@@ -1,10 +1,10 @@
 import { Router } from 'express'
-import { requireAuth } from '../lib/auth'
-import { db } from '../db'
-import { users } from '../db/schema'
+import { requireAuth } from '../lib/auth.js'
+import { db } from '../db/index.js'
+import { users } from '../db/schema.js'
 import { eq } from 'drizzle-orm'
-import { getStripe, PLANS } from '../lib/stripe'
-import { log } from '../lib/logger'
+import { getStripe, PLANS } from '../lib/stripe.js'
+import { log } from '../lib/logger.js'
 
 export const billingRouter = Router()
 

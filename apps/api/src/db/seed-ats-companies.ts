@@ -1,6 +1,6 @@
 import 'dotenv/config'
-import { db } from './index'
-import { atsCompanies } from './schema'
+import { db } from './index.js'
+import { atsCompanies } from './schema.js'
 import { eq } from 'drizzle-orm'
 
 const providerFiles = ['lever', 'greenhouse', 'ashby']

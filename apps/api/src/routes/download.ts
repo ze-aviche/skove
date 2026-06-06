@@ -1,15 +1,15 @@
 import { Router } from 'express'
 import { clerkClient } from '@clerk/clerk-sdk-node'
-import { db } from '../db'
-import { agentResults } from '../db/schema'
+import { db } from '../db/index.js'
+import { agentResults } from '../db/schema.js'
 import { eq } from 'drizzle-orm'
-import { requireAuth } from '../lib/auth'
-import { log } from '../lib/logger'
+import { requireAuth } from '../lib/auth.js'
+import { log } from '../lib/logger.js'
 import {
   buildResumePdf, buildCoverLetterPdf,
   buildResumeDocx, buildCoverLetterDocx,
   slugify,
-} from '../lib/document'
+} from '../lib/document.js'
 
 export const downloadRouter = Router()
 

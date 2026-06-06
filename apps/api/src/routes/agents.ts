@@ -1,13 +1,13 @@
 import { Router } from 'express'
 import { clerkClient } from '@clerk/clerk-sdk-node'
-import { db } from '../db'
-import { agentInstances, agentDefinitions, users, agentResults } from '../db/schema'
+import { db } from '../db/index.js'
+import { agentInstances, agentDefinitions, users, agentResults } from '../db/schema.js'
 import { eq } from 'drizzle-orm'
-import { requireAuth } from '../lib/auth'
+import { requireAuth } from '../lib/auth.js'
 import { z } from 'zod'
-import { scheduleInstance, unscheduleInstance, runInstance, frequencyToCron } from '../runner/scheduler'
-import { log } from '../lib/logger'
-import { PLANS } from '../lib/stripe'
+import { scheduleInstance, unscheduleInstance, runInstance, frequencyToCron } from '../runner/scheduler.js'
+import { log } from '../lib/logger.js'
+import { PLANS } from '../lib/stripe.js'
 
 export const agentsRouter = Router()
 

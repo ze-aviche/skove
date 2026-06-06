@@ -1,11 +1,11 @@
-﻿import { AgentRunResult } from './flight-watcher'
-import { RunnerContext } from './index'
-import { scoreJobMatch, tailorResume } from '../../lib/claude'
-import { db } from '../../db'
-import { users, atsJobs, atsQueryCaches, atsCompanies, agentResults } from '../../db/schema'
+﻿import { AgentRunResult } from './flight-watcher.js'
+import { RunnerContext } from './index.js'
+import { scoreJobMatch, tailorResume } from '../../lib/claude.js'
+import { db } from '../../db/index.js'
+import { users, atsJobs, atsQueryCaches, atsCompanies, agentResults } from '../../db/schema.js'
 import { and, desc, eq, lt, or, sql, SQL } from 'drizzle-orm'
 import { createHash } from 'crypto'
-import { log } from '../../lib/logger'
+import { log } from '../../lib/logger.js'
 
 interface JobTrackerConfig {
   jobTitle?: string

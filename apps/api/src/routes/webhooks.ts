@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express'
-import { db } from '../db'
-import { users } from '../db/schema'
+import { db } from '../db/index.js'
+import { users } from '../db/schema.js'
 import { eq } from 'drizzle-orm'
-import { log } from '../lib/logger'
-import { getStripe, Stripe } from '../lib/stripe'
+import { log } from '../lib/logger.js'
+import { getStripe, Stripe } from '../lib/stripe.js'
 
 export const webhooksRouter = Router()
 

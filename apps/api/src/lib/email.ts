@@ -1,5 +1,5 @@
 import { Resend } from 'resend'
-import { log } from './logger'
+import { log } from './logger.js'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM = process.env.EMAIL_FROM || 'Skove <hello@skove.app>'

@@ -1,11 +1,11 @@
 import * as cron from 'node-cron'
 import { eq } from 'drizzle-orm'
 import { clerkClient } from '@clerk/clerk-sdk-node'
-import { db } from '../db'
-import { agentInstances, agentDefinitions, agentResults, users } from '../db/schema'
-import { agentRunners } from './agents'
-import { sendAlertEmail, sendDailyDigest, DigestItem } from '../lib/email'
-import { log } from '../lib/logger'
+import { db } from '../db/index.js'
+import { agentInstances, agentDefinitions, agentResults, users } from '../db/schema.js'
+import { agentRunners } from './agents/index.js'
+import { sendAlertEmail, sendDailyDigest, DigestItem } from '../lib/email.js'
+import { log } from '../lib/logger.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const scheduledTasks = new Map<string, any>()

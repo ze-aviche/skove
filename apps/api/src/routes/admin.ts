@@ -1,10 +1,10 @@
 import { Router } from 'express'
-import { requireAuth } from '../lib/auth'
-import { db } from '../db'
-import { users, agentInstances, agentResults } from '../db/schema'
+import { requireAuth } from '../lib/auth.js'
+import { db } from '../db/index.js'
+import { users, agentInstances, agentResults } from '../db/schema.js'
 import { eq, sql } from 'drizzle-orm'
 import { clerkClient } from '@clerk/clerk-sdk-node'
-import { log } from '../lib/logger'
+import { log } from '../lib/logger.js'
 import { z } from 'zod'
 
 export const adminRouter = Router()

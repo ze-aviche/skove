@@ -1,6 +1,6 @@
-import { AgentRunResult } from './flight-watcher'
-import { RunnerContext } from './index'
-import { log } from '../../lib/logger'
+import { AgentRunResult } from './flight-watcher.js'
+import { RunnerContext } from './index.js'
+import { log } from '../../lib/logger.js'
 
 interface RealEstateConfig {
   listingType?: string

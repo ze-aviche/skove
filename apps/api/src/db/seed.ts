@@ -1,8 +1,8 @@
 import 'dotenv/config'
-import { db } from './index'
-import { agentDefinitions, atsCompanies } from './schema'
+import { db } from './index.js'
+import { agentDefinitions, atsCompanies } from './schema.js'
 import { eq } from 'drizzle-orm'
-import { seedATSCompanies } from './seed-ats-companies'
+import { seedATSCompanies } from './seed-ats-companies.js'
 
 const builtInAgents = [
   {
