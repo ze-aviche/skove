@@ -393,10 +393,13 @@ export default function ResultsPage() {
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         {r.url && (
-                          <a href={r.url} target="_blank" rel="noreferrer" style={{
-                            fontSize: 11, fontWeight: 500,
-                            color: 'var(--brand)', textDecoration: 'none',
-                          }}>{urlLabel(r)}</a>
+                          <a
+                            href={r.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={() => { if (!r.isRead) handleMarkRead(r.id) }}
+                            style={{ fontSize: 11, fontWeight: 500, color: 'var(--brand)', textDecoration: 'none' }}
+                          >{urlLabel(r)}</a>
                         )}
                         {isJobResult && matchScore === null && (
                           <button
