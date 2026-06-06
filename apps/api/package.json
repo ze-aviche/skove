@@ -1,6 +1,7 @@
 {
   "name": "api",
   "version": "0.1.1",
+  "type": "module",
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -9,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "drizzle-kit push:pg --config ./drizzle.config.ts",
     "db:seed": "tsx src/db/seed.ts",
+    "db:seed-ats-companies": "tsx src/db/seed-ats-companies.ts",
     "db:studio": "drizzle-kit studio --config ./drizzle.config.ts"
   },
   "dependencies": {
@@ -39,3 +41,5 @@
     "typescript": "^5.3.3"
   }
 }
+
+

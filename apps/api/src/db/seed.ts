@@ -2,6 +2,7 @@ import 'dotenv/config'
 import { db } from './index'
 import { agentDefinitions, atsCompanies } from './schema'
 import { eq } from 'drizzle-orm'
+import { seedATSCompanies } from './seed-ats-companies'
 
 const builtInAgents = [
   {
@@ -158,6 +159,8 @@ async function seed() {
     }
     console.log(`Upserted ATS company: ${company.name}`)
   }
+
+  await seedATSCompanies()
 
   console.log('Seeding complete.')
 }
