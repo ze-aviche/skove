@@ -2,6 +2,7 @@ import 'dotenv/config'
 import { db } from './index.js'
 import { atsCompanies } from './schema.js'
 import { eq } from 'drizzle-orm'
+import { fileURLToPath } from 'url'
 
 const providerFiles = ['lever', 'greenhouse', 'ashby']
 const githubRawBase = 'https://raw.githubusercontent.com/kalil0321/ats-scrapers/main/ats-companies'
@@ -93,7 +94,7 @@ export async function seedATSCompanies() {
   console.log('ATS company seeding complete.')
 }
 
-if (require.main === module) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   seedATSCompanies().catch((error) => {
     console.error('Seed failed:', error)
     process.exit(1)

@@ -259,46 +259,81 @@ function getProviderCompanySlug(company: string, provider: 'lever' | 'greenhouse
   return providerCompanyAliases[normalized]?.[provider] ?? normalized
 }
 
-async function fetchLeverJobs(jobTitle: string, location: string, minSalary: number, companies: Array<{ name: string; atsIdentifier: string }>): Promise<NormalisedJob[]> {
+async function fetchLeverJobs(jobTitle: string, location: string, minSalary: number, companies: Array<{ name: string; atsIdentifier: string; careersUrl?: string }>): Promise<NormalisedJob[]> {
   const query = normalizeText(jobTitle)
   const isRemote = location.includes('remote')
   const results: NormalisedJob[] = []
 
   const promises = companies.map(async (company) => {
-    const url = `https://api.lever.co/v0/postings/${company.atsIdentifier}?mode=json`
-    try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'skove-agent/1.0' } })
-      if (!res.ok) {
-        log.warn('job-tracker', 'lever fetch failed', { company: company.name, providerId: company.atsIdentifier, status: res.status, url })
-        return []
-      }
-      const data = await res.json() as Array<Record<string, any>>
-      const filtered = (data ?? [])
-        .filter((job) => {
-          const title = normalizeText(job.text)
-          const locationText = normalizeText(job.categories?.location)
-          const salary = job.salary_min ?? job.salaryMin ?? null
-          const meetsSalary = salary == null || salary >= minSalary
-          return matchText(title, query) && matchLocation(locationText, location, isRemote) && meetsSalary
-        })
-        .slice(0, 6)
+    const baseUrlForSlug = (slug: string) => `https://api.lever.co/v0/postings/${slug}?mode=json`
 
-      return filtered.map((job) => ({
-        id: `lever-${company.atsIdentifier}-${job.id}`,
-        title: job.text,
-        company: displayCompanyName(company.name),
-        location: job.categories?.location ?? 'Remote',
-        applyUrl: job.hostedUrl ?? `https://jobs.lever.co/${company.atsIdentifier}/${job.id}`,
-        salaryMin: undefined,
-        salaryMax: undefined,
-        description: job.description || job.notes,
-        postedAt: job.postedAt || new Date().toISOString(),
-        source: 'Lever ATS',
-      }))
-    } catch (err) {
-      log.error('job-tracker', 'lever fetch error', err, { company: company.name, providerId: company.atsIdentifier, url })
-      return []
+    async function tryFetchForSlug(slug: string) {
+      const url = baseUrlForSlug(slug)
+      try {
+        const res = await fetch(url, { headers: { 'User-Agent': 'skove-agent/1.0' } })
+        if (!res.ok) return { ok: false, status: res.status, url }
+        const data = await res.json() as Array<Record<string, any>>
+        return { ok: true, data, url }
+      } catch (err) {
+        return { ok: false, err, url: baseUrlForSlug(slug) }
+      }
     }
+
+    // Attempt initial fetch with stored atsIdentifier
+    let attempt = await tryFetchForSlug(company.atsIdentifier)
+    if (!attempt.ok) {
+      log.warn('job-tracker', 'lever fetch failed', { company: company.name, providerId: company.atsIdentifier, status: attempt.status, url: attempt.url })
+
+      const candidates: string[] = []
+      // slug from careersUrl (last path segment)
+      if (company.careersUrl) {
+        try {
+          const parsed = new URL(String(company.careersUrl))
+          const parts = parsed.pathname.split('/').filter(Boolean)
+          if (parts.length > 0) candidates.push(parts[parts.length - 1].toLowerCase())
+        } catch (_e) {
+          // ignore invalid careers URL
+        }
+      }
+      // normalized name and dashed name
+      candidates.push(normalizeText(company.name))
+      candidates.push(normalizeText(company.name).replace(/\s+/g, '-'))
+
+      for (const cand of candidates) {
+        const candAttempt = await tryFetchForSlug(cand)
+        if (candAttempt.ok) {
+          attempt = candAttempt
+          break
+        }
+        log.warn('job-tracker', 'lever fetch candidate failed', { company: company.name, candidate: cand, status: candAttempt.status, url: candAttempt.url })
+      }
+    }
+
+    if (!attempt.ok) return []
+
+    const data = attempt.data as Array<Record<string, any>>
+    const filtered = (data ?? [])
+      .filter((job) => {
+        const title = normalizeText(job.text)
+        const locationText = normalizeText(job.categories?.location)
+        const salary = job.salary_min ?? job.salaryMin ?? null
+        const meetsSalary = salary == null || salary >= minSalary
+        return matchText(title, query) && matchLocation(locationText, location, isRemote) && meetsSalary
+      })
+      .slice(0, 6)
+
+    return filtered.map((job) => ({
+      id: `lever-${company.atsIdentifier}-${job.id}`,
+      title: job.text,
+      company: displayCompanyName(company.name),
+      location: job.categories?.location ?? 'Remote',
+      applyUrl: job.hostedUrl ?? `https://jobs.lever.co/${company.atsIdentifier}/${job.id}`,
+      salaryMin: undefined,
+      salaryMax: undefined,
+      description: job.description || job.notes,
+      postedAt: job.postedAt || new Date().toISOString(),
+      source: 'Lever ATS',
+    }))
   })
 
   const settled = await Promise.allSettled(promises)
@@ -416,7 +451,7 @@ async function fetchAshbyJobs(jobTitle: string, location: string, minSalary: num
 }
 
 async function fetchATSJobsForCompanyRows(jobTitle: string, location: string, minSalary: number, rows: ATSCompanyRow[]): Promise<NormalisedJob[]> {
-  const leverCompanies = rows.filter((row) => row.atsType === 'lever').map((row) => ({ name: row.name, atsIdentifier: row.atsIdentifier }))
+  const leverCompanies = rows.filter((row) => row.atsType === 'lever').map((row) => ({ name: row.name, atsIdentifier: row.atsIdentifier, careersUrl: row.careersUrl }))
   const greenhouseCompanies = rows.filter((row) => row.atsType === 'greenhouse').map((row) => ({ name: row.name, atsIdentifier: row.atsIdentifier }))
   const ashbyCompanies = rows.filter((row) => row.atsType === 'ashby').map((row) => ({ name: row.name, atsIdentifier: row.atsIdentifier }))
 
