@@ -421,14 +421,35 @@ async function fetchATSJobsForCompanyRows(jobTitle: string, location: string, mi
   const ashbyCompanies = rows.filter((row) => row.atsType === 'ashby').map((row) => ({ name: row.name, atsIdentifier: row.atsIdentifier }))
 
   const results: NormalisedJob[] = []
+  // Load vendored scrapers dynamically at runtime (avoids TS resolution issues)
+  let vendor: any = null
+  try {
+    // @ts-ignore - dynamic import of vendored scrapers package (may not be on TS path)
+    vendor = await import(new URL('../../../../../packages/scrapers/src/index.ts', import.meta.url))
+  } catch (err) {
+    log.warn('job-tracker', 'failed to load vendored scrapers, falling back to local fetchers', { err })
+  }
+
   if (leverCompanies.length > 0) {
-    results.push(...await fetchLeverJobs(jobTitle, location, minSalary, leverCompanies))
+    if (vendor?.fetchLeverJobs) {
+      results.push(...await vendor.fetchLeverJobs(jobTitle, location, minSalary, leverCompanies))
+    } else {
+      results.push(...await fetchLeverJobs(jobTitle, location, minSalary, leverCompanies))
+    }
   }
   if (greenhouseCompanies.length > 0) {
-    results.push(...await fetchGreenhouseJobs(jobTitle, location, minSalary, greenhouseCompanies))
+    if (vendor?.fetchGreenhouseJobs) {
+      results.push(...await vendor.fetchGreenhouseJobs(jobTitle, location, minSalary, greenhouseCompanies))
+    } else {
+      results.push(...await fetchGreenhouseJobs(jobTitle, location, minSalary, greenhouseCompanies))
+    }
   }
   if (ashbyCompanies.length > 0) {
-    results.push(...await fetchAshbyJobs(jobTitle, location, minSalary, ashbyCompanies))
+    if (vendor?.fetchAshbyJobs) {
+      results.push(...await vendor.fetchAshbyJobs(jobTitle, location, minSalary, ashbyCompanies))
+    } else {
+      results.push(...await fetchAshbyJobs(jobTitle, location, minSalary, ashbyCompanies))
+    }
   }
   return results.slice(0, 20)
 }

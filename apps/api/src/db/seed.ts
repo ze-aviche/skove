@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { db } from './index'
-import { agentDefinitions } from './schema'
+import { agentDefinitions, atsCompanies } from './schema'
+import { eq } from 'drizzle-orm'
 
 const builtInAgents = [
   {
@@ -109,6 +110,55 @@ async function seed() {
     })
     console.log(`Upserted agent: ${agent.id}`)
   }
+
+  const companySeeds = [
+    {
+      name: 'Anthropic',
+      careersUrl: 'https://boards.greenhouse.io/anthropic',
+      atsType: 'greenhouse',
+      atsIdentifier: 'anthropic',
+      isEnabled: true,
+    },
+    {
+      name: 'OpenAI',
+      careersUrl: 'https://openai.com/careers',
+      atsType: 'custom',
+      atsIdentifier: 'openai',
+      isEnabled: true,
+    },
+    {
+      name: 'Google',
+      careersUrl: 'https://careers.google.com',
+      atsType: 'greenhouse',
+      atsIdentifier: 'google',
+      isEnabled: true,
+    },
+  ]
+
+  console.log('Seeding ATS company mappings...')
+  for (const company of companySeeds) {
+    const existing = await db.select({ id: atsCompanies.id }).from(atsCompanies).where(eq(atsCompanies.atsIdentifier, company.atsIdentifier))
+    if (existing.length > 0) {
+      await db.update(atsCompanies).set({
+        name: company.name,
+        careersUrl: company.careersUrl,
+        atsType: company.atsType,
+        isEnabled: company.isEnabled,
+        updatedAt: new Date(),
+      }).where(eq(atsCompanies.atsIdentifier, company.atsIdentifier))
+    } else {
+      await db.insert(atsCompanies).values({
+        name: company.name,
+        careersUrl: company.careersUrl,
+        atsType: company.atsType,
+        atsIdentifier: company.atsIdentifier,
+        isEnabled: company.isEnabled,
+        updatedAt: new Date(),
+      })
+    }
+    console.log(`Upserted ATS company: ${company.name}`)
+  }
+
   console.log('Seeding complete.')
 }
 

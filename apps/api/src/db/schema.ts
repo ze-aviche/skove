@@ -83,7 +83,7 @@ export const atsCompanies = pgTable('ats_companies', {
   name: text('name').notNull(),
   careersUrl: text('careers_url'),
   atsType: text('ats_type').notNull(),
-  atsIdentifier: text('ats_identifier').notNull(),
+  atsIdentifier: text('ats_identifier').notNull().unique(),
   isEnabled: boolean('is_enabled').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
