@@ -282,15 +282,17 @@ async function fetchLeverJobs(jobTitle: string, location: string, minSalary: num
     // Attempt initial fetch with stored atsIdentifier
     let attempt = await tryFetchForSlug(company.atsIdentifier)
     if (!attempt.ok) {
-      log.warn('job-tracker', 'lever fetch failed', { company: company.name, providerId: company.atsIdentifier, status: attempt.status, url: attempt.url })
-
       const candidates: string[] = []
-      // slug from careersUrl (last path segment)
+      // slug from careersUrl (last path segment) — preserve original case; Lever slugs are case-sensitive
       if (company.careersUrl) {
         try {
           const parsed = new URL(String(company.careersUrl))
           const parts = parsed.pathname.split('/').filter(Boolean)
-          if (parts.length > 0) candidates.push(parts[parts.length - 1].toLowerCase())
+          if (parts.length > 0) {
+            const rawSlug = parts[parts.length - 1]
+            candidates.push(rawSlug)
+            candidates.push(rawSlug.toLowerCase())
+          }
         } catch (_e) {
           // ignore invalid careers URL
         }
@@ -299,13 +301,23 @@ async function fetchLeverJobs(jobTitle: string, location: string, minSalary: num
       candidates.push(normalizeText(company.name))
       candidates.push(normalizeText(company.name).replace(/\s+/g, '-'))
 
-      for (const cand of candidates) {
+      // deduplicate and skip slugs already tried
+      const uniqueCandidates = Array.from(new Set(candidates)).filter((c) => c !== company.atsIdentifier)
+
+      for (const cand of uniqueCandidates) {
         const candAttempt = await tryFetchForSlug(cand)
         if (candAttempt.ok) {
           attempt = candAttempt
           break
         }
-        log.warn('job-tracker', 'lever fetch candidate failed', { company: company.name, candidate: cand, status: candAttempt.status, url: candAttempt.url })
+      }
+
+      if (!attempt.ok) {
+        log.warn('job-tracker', 'lever fetch failed for all slugs', {
+          company: company.name,
+          triedSlugs: [company.atsIdentifier, ...uniqueCandidates],
+          status: attempt.status,
+        })
       }
     }
 
@@ -450,10 +462,32 @@ async function fetchAshbyJobs(jobTitle: string, location: string, minSalary: num
   return results
 }
 
+function inferAtsTypeFromUrl(careersUrl: string | null | undefined, currentType: string): string {
+  if (!careersUrl) return currentType
+  const url = careersUrl.toLowerCase()
+  if (url.includes('greenhouse.io')) return 'greenhouse'
+  if (url.includes('lever.co')) return 'lever'
+  if (url.includes('ashbyhq.com') || url.includes('boards.ashby.io')) return 'ashby'
+  return currentType
+}
+
 async function fetchATSJobsForCompanyRows(jobTitle: string, location: string, minSalary: number, rows: ATSCompanyRow[]): Promise<NormalisedJob[]> {
-  const leverCompanies = rows.filter((row) => row.atsType === 'lever').map((row) => ({ name: row.name, atsIdentifier: row.atsIdentifier, careersUrl: row.careersUrl }))
-  const greenhouseCompanies = rows.filter((row) => row.atsType === 'greenhouse').map((row) => ({ name: row.name, atsIdentifier: row.atsIdentifier }))
-  const ashbyCompanies = rows.filter((row) => row.atsType === 'ashby').map((row) => ({ name: row.name, atsIdentifier: row.atsIdentifier }))
+  const resolvedRows = rows.map((row) => {
+    const resolvedType = inferAtsTypeFromUrl(row.careersUrl, row.atsType)
+    if (resolvedType !== row.atsType) {
+      log.warn('job-tracker', 'ats type mismatch: careersUrl implies different provider than stored atsType', {
+        company: row.name,
+        storedType: row.atsType,
+        inferredType: resolvedType,
+        careersUrl: row.careersUrl,
+      })
+    }
+    return { ...row, atsType: resolvedType }
+  })
+
+  const leverCompanies = resolvedRows.filter((row) => row.atsType === 'lever').map((row) => ({ name: row.name, atsIdentifier: row.atsIdentifier, careersUrl: row.careersUrl }))
+  const greenhouseCompanies = resolvedRows.filter((row) => row.atsType === 'greenhouse').map((row) => ({ name: row.name, atsIdentifier: row.atsIdentifier }))
+  const ashbyCompanies = resolvedRows.filter((row) => row.atsType === 'ashby').map((row) => ({ name: row.name, atsIdentifier: row.atsIdentifier }))
 
   const results: NormalisedJob[] = []
   // Load vendored scrapers dynamically at runtime (avoids TS resolution issues)
