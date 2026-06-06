@@ -6,6 +6,7 @@ import { log } from '../../lib/logger.js'
 const BATCH_SIZE = 200
 const CONCURRENCY_PER_PROVIDER = 5 // max simultaneous requests to any single ATS provider
 const RETENTION_MS = 1000 * 60 * 60 * 24 * 14 // 14 days
+const FETCH_TIMEOUT_MS = 15_000
 
 interface NormalisedJob {
   id: string
@@ -42,7 +43,10 @@ async function fetchLeverCompanyJobs(company: {
   async function trySlug(slug: string): Promise<Array<Record<string, any>> | null> {
     const url = `https://api.lever.co/v0/postings/${slug}?mode=json`
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'skove-agent/1.0' } })
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'skove-agent/1.0' },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      })
       if (!res.ok) return null
       return await res.json() as Array<Record<string, any>>
     } catch {
@@ -104,7 +108,10 @@ async function fetchGreenhouseCompanyJobs(company: {
 }): Promise<NormalisedJob[]> {
   const url = `https://boards-api.greenhouse.io/v1/boards/${company.atsIdentifier}/jobs?content=true`
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'skove-agent/1.0' } })
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'skove-agent/1.0' },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    })
     if (!res.ok) {
       log.warn('ats-refresher', 'greenhouse: fetch failed', { company: company.name, status: res.status })
       return []
@@ -123,7 +130,7 @@ async function fetchGreenhouseCompanyJobs(company: {
         source: 'Greenhouse ATS',
       }))
   } catch (err) {
-    log.error('ats-refresher', 'greenhouse: fetch error', err, { company: company.name })
+    log.warn('ats-refresher', 'greenhouse: network error', { company: company.name, err: (err as Error).message })
     return []
   }
 }
@@ -132,31 +139,37 @@ async function fetchAshbyCompanyJobs(company: {
   name: string
   atsIdentifier: string
 }): Promise<NormalisedJob[]> {
-  const url = `https://boards.ashbyhq.com/${company.atsIdentifier}/jobs.json`
+  // Ashby public posting API — documented at https://developers.ashbyhq.com/reference/jobboardjoblistinglist
+  const url = `https://api.ashbyhq.com/posting-api/job-board/${company.atsIdentifier}`
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'skove-agent/1.0' } })
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'skove-agent/1.0',
+      },
+      body: JSON.stringify({}),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    })
     if (!res.ok) {
       log.warn('ats-refresher', 'ashby: fetch failed', { company: company.name, status: res.status })
       return []
     }
-    const json = await res.json()
-    const data: Array<Record<string, any>> = json.data ?? json.jobs ?? json.results ?? json
-    return (data ?? [])
-      .filter((job) => (job.title ?? job.text ?? job.name) && job.id)
+    const json = await res.json() as { results?: Array<Record<string, any>> }
+    return (json.results ?? [])
+      .filter((job) => job.title && job.id && job.isListed !== false)
       .map((job) => ({
-        id: `ashby-${company.atsIdentifier}-${job.id ?? job.uuid}`,
-        title: job.title ?? job.text ?? job.name,
+        id: `ashby-${company.atsIdentifier}-${job.id}`,
+        title: job.title,
         company: company.name,
-        location: job.location?.name ?? job.location ?? 'Remote',
-        applyUrl: job.applyUrl ?? job.url ?? job.hostedUrl ?? `https://boards.ashbyhq.com/${company.atsIdentifier}`,
-        salaryMin: job.salaryMin ?? job.salary_min,
-        salaryMax: job.salaryMax ?? job.salary_max,
-        description: job.description ?? job.notes,
-        postedAt: job.updatedAt || job.postedAt || job.createdAt || new Date().toISOString(),
+        location: job.locationName ?? (job.isRemote ? 'Remote' : 'Unknown'),
+        applyUrl: job.applyUrl ?? `https://jobs.ashbyhq.com/${company.atsIdentifier}/${job.id}`,
+        description: job.descriptionPlain ?? job.description,
+        postedAt: job.publishedDate || new Date().toISOString(),
         source: 'Ashby ATS',
       }))
   } catch (err) {
-    log.error('ats-refresher', 'ashby: fetch error', err, { company: company.name })
+    log.warn('ats-refresher', 'ashby: network error', { company: company.name, err: (err as Error).message })
     return []
   }
 }
