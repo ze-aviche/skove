@@ -2,7 +2,7 @@
 import { RunnerContext } from './index'
 import { scoreJobMatch, tailorResume } from '../../lib/claude'
 import { db } from '../../db'
-import { users, atsJobs, atsQueryCaches, atsCompanies } from '../../db/schema'
+import { users, atsJobs, atsQueryCaches, atsCompanies, agentResults } from '../../db/schema'
 import { and, desc, eq, lt, or, sql, SQL } from 'drizzle-orm'
 import { createHash } from 'crypto'
 import { log } from '../../lib/logger'
@@ -592,6 +592,10 @@ export async function runJobApplicationTracker(
 
   log.info('job-tracker', 'jobs fetched', { total: jobs.length, hasResume: Boolean(resumeText), threshold: matchThreshold, userId: ctx.userId })
 
+  // Fetch previously delivered result URLs for this user so we don't resend them.
+  const deliveredRows = await db.select({ url: agentResults.url }).from(agentResults).where(eq(agentResults.userId, ctx.userId))
+  const deliveredSet = new Set(deliveredRows.map((r: any) => r.url))
+
   const results: AgentRunResult[] = []
 
   for (const job of jobs.slice(0, 8)) {
@@ -599,6 +603,11 @@ export async function runJobApplicationTracker(
 
     if (ctx.seenKeys.has(jobKey)) {
       log.info('job-tracker', 'skipping seen job', { title: job.title, company: job.company, userId: ctx.userId })
+      continue
+    }
+
+    if (deliveredSet.has(job.applyUrl)) {
+      log.info('job-tracker', 'skipping previously delivered job', { title: job.title, company: job.company, url: job.applyUrl, userId: ctx.userId })
       continue
     }
 
