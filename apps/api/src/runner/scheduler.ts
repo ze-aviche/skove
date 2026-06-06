@@ -4,6 +4,7 @@ import { clerkClient } from '@clerk/clerk-sdk-node'
 import { db } from '../db/index.js'
 import { agentInstances, agentDefinitions, agentResults, users } from '../db/schema.js'
 import { agentRunners } from './agents/index.js'
+import { runATSCompanyRefresher } from './agents/ats-company-refresher.js'
 import { sendAlertEmail, sendDailyDigest, DigestItem } from '../lib/email.js'
 import { log } from '../lib/logger.js'
 
@@ -55,6 +56,11 @@ export async function startScheduler() {
     const cronExpr = freq ? frequencyToCron(freq, row.agent_definitions.schedule) : row.agent_definitions.schedule
     scheduleInstance(row.agent_instances.id, cronExpr)
   }
+
+  // ATS company refresh — every hour, processes 200 companies per run
+  cron.schedule('0 * * * *', () => {
+    runATSCompanyRefresher().catch((err) => log.error('scheduler', 'ats refresher failed', err))
+  })
 
   // Morning digest — every day at 8am
   cron.schedule('0 8 * * *', () => {
