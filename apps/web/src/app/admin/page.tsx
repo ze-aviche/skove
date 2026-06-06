@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
-import { getAdminStats, getAdminUsers, adminChangePlan, adminDeleteUser, AdminUser, AdminStats } from '@/lib/api'
+import { getAdminStats, getAdminUsers, adminChangePlan, adminDeleteUser, getAtsStatus, triggerAtsRefresh, AdminUser, AdminStats, AtsStatus } from '@/lib/api'
 
 const PLAN_BADGE: Record<string, { color: string; bg: string }> = {
   free: { color: '#6b7280', bg: 'rgba(107,114,128,0.12)' },
@@ -26,6 +26,8 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 export default function AdminPage() {
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [users, setUsers] = useState<AdminUser[]>([])
+  const [atsStatus, setAtsStatus] = useState<AtsStatus | null>(null)
+  const [atsRefreshing, setAtsRefreshing] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -37,9 +39,10 @@ export default function AdminPage() {
     async function load() {
       try {
         const token = await auth.getToken()
-        const [s, u] = await Promise.all([getAdminStats(token), getAdminUsers(token)])
+        const [s, u, ats] = await Promise.all([getAdminStats(token), getAdminUsers(token), getAtsStatus(token).catch(() => null)])
         setStats(s)
         setUsers(u)
+        setAtsStatus(ats)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load admin data')
       } finally {
@@ -48,6 +51,19 @@ export default function AdminPage() {
     }
     load()
   }, [])
+
+  const handleAtsRefresh = async () => {
+    setAtsRefreshing(true)
+    try {
+      const token = await auth.getToken()
+      await triggerAtsRefresh(token)
+      showToast({ message: 'ATS refresh started — check Railway logs for progress', variant: 'success' })
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'Refresh failed', variant: 'error' })
+    } finally {
+      setAtsRefreshing(false)
+    }
+  }
 
   const handlePlanChange = async (userId: string, plan: string) => {
     try {
@@ -110,6 +126,48 @@ export default function AdminPage() {
               <StatCard label="Total results" value={stats.totalResults} />
             </div>
           )}
+
+          {/* ATS Pipeline */}
+          <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px', marginBottom: 28 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>ATS Job Pipeline</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Fetches jobs from Lever, Greenhouse, and Ashby hourly.</div>
+              </div>
+              <button
+                onClick={handleAtsRefresh}
+                disabled={atsRefreshing}
+                style={{
+                  fontSize: 12, fontWeight: 500,
+                  padding: '7px 16px', borderRadius: 8,
+                  border: '1px solid rgba(59,130,246,0.3)',
+                  background: 'var(--brand-dim)',
+                  color: atsRefreshing ? 'var(--text-tertiary)' : 'var(--brand)',
+                  cursor: atsRefreshing ? 'not-allowed' : 'pointer',
+                  opacity: atsRefreshing ? 0.6 : 1,
+                }}
+              >
+                {atsRefreshing ? 'Starting…' : 'Fetch now'}
+              </button>
+            </div>
+            {atsStatus ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                {[
+                  { label: 'Jobs in DB', value: atsStatus.jobsInDb.toLocaleString() },
+                  { label: 'Enabled companies', value: atsStatus.enabledCompanies.toLocaleString() },
+                  { label: 'Never fetched', value: atsStatus.neverFetched.toLocaleString(), warn: atsStatus.neverFetched > 0 },
+                  { label: 'Last fetched', value: atsStatus.lastFetchedAt ? new Date(atsStatus.lastFetchedAt).toLocaleString() : 'Never' },
+                ].map(({ label, value, warn }) => (
+                  <div key={label} style={{ background: 'var(--surface-3)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>{label}</div>
+                    <div style={{ fontSize: 18, fontWeight: 600, color: warn ? 'var(--warning)' : 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Status unavailable</div>
+            )}
+          </div>
 
           {/* Filters */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center' }}>

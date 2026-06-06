@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
-import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, AgentResult } from '@/lib/api'
+import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, scoreResult, AgentResult } from '@/lib/api'
 
 type Tab = 'All' | 'Unread' | 'Flights' | 'Jobs' | 'Rentals' | 'Stocks' | 'News'
 const TABS: Tab[] = ['All', 'Unread', 'Flights', 'Jobs', 'Rentals', 'Stocks', 'News']
@@ -62,6 +62,7 @@ export default function ResultsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('All')
   const [expandedCoverLetter, setExpandedCoverLetter] = useState<string | null>(null)
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [scoringIds, setScoringIds] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
   const auth = useAuth()
@@ -174,6 +175,20 @@ export default function ResultsPage() {
       showToast({ message: err instanceof Error ? err.message : 'Failed to delete', variant: 'error' })
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleScore = async (r: AgentResult) => {
+    setScoringIds(prev => new Set(prev).add(r.id))
+    try {
+      const token = await auth.getToken()
+      const res = await scoreResult(r.id, token)
+      setResults(prev => prev.map(x => x.id === r.id ? { ...x, metadata: res.metadata } : x))
+      showToast({ message: res.already ? 'Already scored' : 'Score complete', variant: 'success' })
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'Scoring failed', variant: 'error' })
+    } finally {
+      setScoringIds(prev => { const s = new Set(prev); s.delete(r.id); return s })
     }
   }
 
@@ -310,6 +325,8 @@ export default function ResultsPage() {
                 const hasCover = !!meta.coverLetter
                 const matchScore = meta.matchScore != null ? Number(meta.matchScore) : null
                 const matchReasoning = typeof meta.matchReasoning === 'string' ? meta.matchReasoning : null
+                const isJobResult = agentType(r).includes('job')
+                const isScoring = scoringIds.has(r.id)
 
                 return (
                   <div key={r.id} style={{
@@ -380,6 +397,23 @@ export default function ResultsPage() {
                             fontSize: 11, fontWeight: 500,
                             color: 'var(--brand)', textDecoration: 'none',
                           }}>{urlLabel(r)}</a>
+                        )}
+                        {isJobResult && matchScore === null && (
+                          <button
+                            onClick={() => handleScore(r)}
+                            disabled={isScoring}
+                            style={{
+                              fontSize: 11, fontWeight: 500,
+                              padding: '4px 10px', borderRadius: 7,
+                              border: '1px solid rgba(139,92,246,0.3)',
+                              background: 'rgba(139,92,246,0.08)',
+                              color: isScoring ? 'var(--text-tertiary)' : '#8b5cf6',
+                              cursor: isScoring ? 'not-allowed' : 'pointer',
+                              opacity: isScoring ? 0.6 : 1,
+                            }}
+                          >
+                            {isScoring ? 'Scoring…' : '✦ Score match'}
+                          </button>
                         )}
                         {hasCover && (
                           <button

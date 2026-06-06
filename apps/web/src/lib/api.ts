@@ -222,6 +222,33 @@ export async function downloadDocument(
   URL.revokeObjectURL(url)
 }
 
+export function scoreResult(resultId: string, token?: string): Promise<{ already: boolean; metadata: Record<string, unknown> }> {
+  return fetchJson(`/api/results/${resultId}/score`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
+// ── ATS Pipeline (admin) ─────────────────────────────────────────────────────
+
+export type AtsStatus = {
+  jobsInDb: number
+  enabledCompanies: number
+  neverFetched: number
+  lastFetchedAt: string | null
+}
+
+export function getAtsStatus(token?: string): Promise<AtsStatus> {
+  return fetchJson('/api/admin/ats/status', token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
+}
+
+export function triggerAtsRefresh(token?: string): Promise<{ message: string }> {
+  return fetchJson('/api/admin/ats/refresh', {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
 export async function uploadResume(file: File, token?: string): Promise<{ success: boolean; wordCount: number; pages: number }> {
   const form = new FormData()
   form.append('resume', file)
