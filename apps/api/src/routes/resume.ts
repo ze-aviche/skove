@@ -1,13 +1,13 @@
 import { Router, Request, Response } from 'express'
 import multer from 'multer'
+import pdfParse from 'pdf-parse'
 import { requireAuth } from '../lib/auth.js'
 import { db } from '../db/index.js'
 import { users } from '../db/schema.js'
 import { eq } from 'drizzle-orm'
 import { log } from '../lib/logger.js'
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string; numpages: number }>
+const parsePdf = pdfParse as (buf: Buffer) => Promise<{ text: string; numpages: number }>
 
 const upload = multer({
   storage: multer.memoryStorage(),
