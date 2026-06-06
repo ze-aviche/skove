@@ -4,7 +4,7 @@ import { eq, lt, sql } from 'drizzle-orm'
 import { log } from '../../lib/logger.js'
 
 const BATCH_SIZE = 200
-const CONCURRENCY = 20
+const CONCURRENCY_PER_PROVIDER = 5 // max simultaneous requests to any single ATS provider
 const RETENTION_MS = 1000 * 60 * 60 * 24 * 14 // 14 days
 
 interface NormalisedJob {
@@ -208,6 +208,16 @@ async function processInChunks<T>(
   }
 }
 
+function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
+  const map = new Map<string, T[]>()
+  for (const item of items) {
+    const k = key(item)
+    if (!map.has(k)) map.set(k, [])
+    map.get(k)!.push(item)
+  }
+  return map
+}
+
 export async function runATSCompanyRefresher(): Promise<void> {
   log.info('ats-refresher', 'run started')
 
@@ -216,27 +226,34 @@ export async function runATSCompanyRefresher(): Promise<void> {
   await db.delete(atsJobs).where(lt(atsJobs.createdAt, retentionCutoff))
   log.info('ats-refresher', 'old jobs cleaned up', { cutoff: retentionCutoff })
 
-  // Pick the BATCH_SIZE companies with oldest lastFetchedAt (nulls first = never fetched)
+  // Pick the BATCH_SIZE companies with oldest lastFetchedAt, secondary sort by ats_type
+  // to naturally interleave providers across the batch
   const companies = await db
     .select()
     .from(atsCompanies)
     .where(eq(atsCompanies.isEnabled, true))
-    .orderBy(sql`${atsCompanies.lastFetchedAt} ASC NULLS FIRST`)
+    .orderBy(sql`${atsCompanies.lastFetchedAt} ASC NULLS FIRST`, sql`${atsCompanies.atsType} ASC`)
     .limit(BATCH_SIZE)
 
   log.info('ats-refresher', 'companies selected', { count: companies.length })
 
+  // Process each ATS provider concurrently but capped per-provider to avoid rate limits
+  const byProvider = groupBy(companies, (c) => inferAtsTypeFromUrl(c.careersUrl, c.atsType))
   let totalJobs = 0
 
-  await processInChunks(companies, CONCURRENCY, async (company) => {
-    const jobs = await fetchCompanyJobs(company)
-    await persistJobs(jobs)
-    await db
-      .update(atsCompanies)
-      .set({ lastFetchedAt: new Date() })
-      .where(eq(atsCompanies.id, company.id))
-    totalJobs += jobs.length
-  })
+  await Promise.allSettled(
+    Array.from(byProvider.entries()).map(([provider, providerCompanies]) =>
+      processInChunks(providerCompanies, CONCURRENCY_PER_PROVIDER, async (company) => {
+        const jobs = await fetchCompanyJobs(company)
+        await persistJobs(jobs)
+        await db
+          .update(atsCompanies)
+          .set({ lastFetchedAt: new Date() })
+          .where(eq(atsCompanies.id, company.id))
+        totalJobs += jobs.length
+      }).then(() => log.info('ats-refresher', 'provider done', { provider, count: providerCompanies.length }))
+    )
+  )
 
   log.info('ats-refresher', 'run complete', {
     companiesProcessed: companies.length,

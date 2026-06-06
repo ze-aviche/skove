@@ -1,9 +1,8 @@
 import { AgentRunResult } from './flight-watcher.js'
 import { RunnerContext } from './index.js'
-import { scoreJobMatch, tailorResume } from '../../lib/claude.js'
 import { db } from '../../db/index.js'
-import { users, atsJobs, agentResults } from '../../db/schema.js'
-import { and, eq, sql } from 'drizzle-orm'
+import { atsJobs, agentResults } from '../../db/schema.js'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { log } from '../../lib/logger.js'
 
 interface JobTrackerConfig {
@@ -12,7 +11,6 @@ interface JobTrackerConfig {
   minSalary?: number | string
   keywords?: string
   atsFirstOnly?: boolean
-  matchThreshold?: number | string
 }
 
 interface NormalisedJob {
@@ -61,7 +59,8 @@ async function fetchStoredATSJobs(queryText: string, location: string, minSalary
         sql`${atsJobs.locationSearch} like ${locationText}`,
       ),
     )
-    .limit(50)
+    .orderBy(desc(atsJobs.createdAt))
+    .limit(100)
 
   return rows
     .filter((job) => minSalary === 0 || job.salaryMin == null || job.salaryMin >= minSalary)
@@ -214,11 +213,6 @@ export async function runJobApplicationTracker(
   const minSalary = Number(c.minSalary) || 0
   const keywords = c.keywords ? String(c.keywords) : ''
   const atsFirstOnly = Boolean(c.atsFirstOnly)
-  const matchThreshold = Number(c.matchThreshold) || 7
-
-  const [user] = await db.select({ resumeText: users.resumeText }).from(users).where(eq(users.id, ctx.userId))
-  const resumeText = user?.resumeText ?? null
-
   const isRemote = location.toLowerCase().includes('remote')
   const what = [jobTitle, keywords].filter(Boolean).join(' ')
   const where = isRemote ? 'remote' : location
@@ -241,28 +235,17 @@ export async function runJobApplicationTracker(
     }
   }
 
-  log.info('job-tracker', 'jobs ready', { total: jobs.length, hasResume: Boolean(resumeText), threshold: matchThreshold, userId: ctx.userId })
-
   const deliveredRows = await db.select({ url: agentResults.url }).from(agentResults).where(eq(agentResults.userId, ctx.userId))
   const deliveredSet = new Set(deliveredRows.map((r: any) => r.url))
 
   const results: AgentRunResult[] = []
 
-  for (const job of jobs.slice(0, 8)) {
+  for (const job of jobs) {
     const jobKey = job.applyUrl ?? `${job.title} @ ${job.company}`
-
-    if (ctx.seenKeys.has(jobKey)) {
-      log.info('job-tracker', 'skipping seen job', { title: job.title, company: job.company })
-      continue
-    }
-
-    if (deliveredSet.has(job.applyUrl)) {
-      log.info('job-tracker', 'skipping previously delivered job', { title: job.title, company: job.company, url: job.applyUrl })
-      continue
-    }
+    if (ctx.seenKeys.has(jobKey) || deliveredSet.has(job.applyUrl)) continue
 
     const salary = formatSalary(job.salaryMin, job.salaryMax)
-    const baseResult: AgentRunResult = {
+    results.push({
       title: `${job.title} @ ${job.company}`,
       value: salary,
       url: job.applyUrl,
@@ -270,55 +253,15 @@ export async function runJobApplicationTracker(
         company: job.company,
         jobTitle: job.title,
         location: job.location,
+        description: job.description,
         salary,
         postedLabel: postedLabel(job.postedAt),
         source: job.source,
         agentType: 'job-application-tracker',
       },
-    }
-
-    if (resumeText) {
-      log.info('job-tracker', 'scoring with claude', { title: job.title, company: job.company, userId: ctx.userId })
-      try {
-        const match = await scoreJobMatch(resumeText, {
-          title: job.title,
-          company: job.company,
-          location: job.location,
-          description: job.description,
-          salary,
-        })
-        log.info('job-tracker', 'claude score', { title: job.title, score: match.score, threshold: matchThreshold })
-
-        if (match.score >= matchThreshold) {
-          let tailoredResumeText: string | undefined
-          try {
-            const tailored = await tailorResume(resumeText, {
-              title: job.title, company: job.company,
-              location: job.location, description: job.description, salary,
-            })
-            tailoredResumeText = tailored.tailoredText
-          } catch (err) {
-            log.error('job-tracker', 'resume tailoring failed', err, { jobId: job.id })
-          }
-          results.push({
-            ...baseResult,
-            metadata: {
-              ...baseResult.metadata,
-              matchScore: match.score,
-              matchReasoning: match.reasoning,
-              coverLetter: match.coverLetter,
-              tailoredResumeText,
-            },
-          })
-        }
-      } catch (err) {
-        log.error('job-tracker', 'claude scoring failed', err, { jobId: job.id, title: job.title })
-        results.push(baseResult)
-      }
-    } else {
-      results.push(baseResult)
-    }
+    })
   }
 
+  log.info('job-tracker', 'run complete', { new: results.length, userId: ctx.userId })
   return results
 }

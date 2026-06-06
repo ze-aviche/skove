@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import { db } from '../db/index.js'
-import { agentResults } from '../db/schema.js'
+import { agentResults, users } from '../db/schema.js'
 import { eq, desc, and, inArray } from 'drizzle-orm'
 import { requireAuth } from '../lib/auth.js'
 import { log } from '../lib/logger.js'
+import { scoreJobMatch, tailorResume } from '../lib/claude.js'
 
 export const resultsRouter = Router()
 
@@ -54,6 +55,64 @@ resultsRouter.delete('/:id', requireAuth, async (req, res) => {
   } catch (err) {
     log.error('api', 'DELETE /api/results/:id failed', err, { resultId: req.params.id, userId: req.userId })
     res.status(500).json({ error: 'Failed to delete result' })
+  }
+})
+
+// POST /api/results/:id/score — run AI match score on demand for a single job result
+resultsRouter.post('/:id/score', requireAuth, async (req, res) => {
+  try {
+    const [result] = await db.select().from(agentResults).where(eq(agentResults.id, req.params.id))
+    if (!result || result.userId !== req.userId) {
+      return res.status(404).json({ error: 'Result not found' })
+    }
+
+    const meta = (result.metadata ?? {}) as Record<string, any>
+    if (meta.matchScore !== undefined) {
+      return res.json({ already: true, metadata: meta })
+    }
+
+    const [userRow] = await db.select({ resumeText: users.resumeText }).from(users).where(eq(users.id, req.userId!))
+    if (!userRow?.resumeText) {
+      return res.status(400).json({ error: 'No resume uploaded — upload a resume before scoring' })
+    }
+
+    const jobData = {
+      title: meta.jobTitle ?? result.title,
+      company: meta.company ?? '',
+      location: meta.location ?? '',
+      description: meta.description,
+      salary: meta.salary,
+    }
+
+    const match = await scoreJobMatch(userRow.resumeText, jobData)
+    log.info('api', 'on-demand score complete', { resultId: result.id, score: match.score, userId: req.userId })
+
+    let tailoredResumeText: string | undefined
+    try {
+      const tailored = await tailorResume(userRow.resumeText, jobData)
+      tailoredResumeText = tailored.tailoredText
+    } catch (err) {
+      log.warn('api', 'resume tailoring failed during score', { resultId: result.id })
+    }
+
+    const updatedMeta = {
+      ...meta,
+      matchScore: match.score,
+      matchReasoning: match.reasoning,
+      coverLetter: match.coverLetter,
+      tailoredResumeText,
+    }
+
+    const [updated] = await db
+      .update(agentResults)
+      .set({ metadata: updatedMeta })
+      .where(eq(agentResults.id, result.id))
+      .returning()
+
+    res.json({ already: false, metadata: updatedMeta })
+  } catch (err) {
+    log.error('api', 'POST /api/results/:id/score failed', err, { resultId: req.params.id, userId: req.userId })
+    res.status(500).json({ error: 'Scoring failed' })
   }
 })
 
