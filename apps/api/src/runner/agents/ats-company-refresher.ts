@@ -124,7 +124,7 @@ async function fetchGreenhouseCompanyJobs(company: {
         title: job.title,
         company: company.name,
         location: job.location?.name ?? 'Remote',
-        applyUrl: `https://boards.greenhouse.io/${company.atsIdentifier}/jobs/${job.id}`,
+        applyUrl: job.absolute_url ?? `https://boards.greenhouse.io/${company.atsIdentifier}/jobs/${job.id}`,
         description: job.contents,
         postedAt: job.updated_at || new Date().toISOString(),
         source: 'Greenhouse ATS',
@@ -139,33 +139,28 @@ async function fetchAshbyCompanyJobs(company: {
   name: string
   atsIdentifier: string
 }): Promise<NormalisedJob[]> {
-  // Ashby public posting API — documented at https://developers.ashbyhq.com/reference/jobboardjoblistinglist
+  // Ashby public posting API — https://developers.ashbyhq.com/docs/public-job-posting-api
   const url = `https://api.ashbyhq.com/posting-api/job-board/${company.atsIdentifier}`
   try {
     const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'skove-agent/1.0',
-      },
-      body: JSON.stringify({}),
+      headers: { 'User-Agent': 'skove-agent/1.0' },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     })
     if (!res.ok) {
       log.warn('ats-refresher', 'ashby: fetch failed', { company: company.name, status: res.status })
       return []
     }
-    const json = await res.json() as { results?: Array<Record<string, any>> }
-    return (json.results ?? [])
+    const json = await res.json() as { jobs?: Array<Record<string, any>> }
+    return (json.jobs ?? [])
       .filter((job) => job.title && job.id && job.isListed !== false)
       .map((job) => ({
         id: `ashby-${company.atsIdentifier}-${job.id}`,
         title: job.title,
         company: company.name,
-        location: job.locationName ?? (job.isRemote ? 'Remote' : 'Unknown'),
+        location: job.location ?? (job.workplaceType === 'Remote' || job.isRemote ? 'Remote' : 'Unknown'),
         applyUrl: job.applyUrl ?? `https://jobs.ashbyhq.com/${company.atsIdentifier}/${job.id}`,
-        description: job.descriptionPlain ?? job.description,
-        postedAt: job.publishedDate || new Date().toISOString(),
+        description: job.descriptionPlain,
+        postedAt: job.publishedAt || new Date().toISOString(),
         source: 'Ashby ATS',
       }))
   } catch (err) {
