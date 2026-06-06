@@ -54,6 +54,8 @@ async function fetchLeverCompanyJobs(company: {
     }
   }
 
+  log.info('ats-refresher', 'lever: fetching', { company: company.name, slug: company.atsIdentifier })
+  let usedSlug = company.atsIdentifier
   let data = await trySlug(company.atsIdentifier)
 
   if (!data) {
@@ -76,7 +78,7 @@ async function fetchLeverCompanyJobs(company: {
     const uniqueCandidates = Array.from(new Set(candidates)).filter((c) => c !== company.atsIdentifier)
     for (const slug of uniqueCandidates) {
       data = await trySlug(slug)
-      if (data) break
+      if (data) { usedSlug = slug; break }
     }
 
     if (!data) {
@@ -88,7 +90,7 @@ async function fetchLeverCompanyJobs(company: {
     }
   }
 
-  return data
+  const jobs = data
     .filter((job) => job.text && job.id)
     .map((job) => ({
       id: `lever-${company.atsIdentifier}-${job.id}`,
@@ -100,6 +102,9 @@ async function fetchLeverCompanyJobs(company: {
       postedAt: job.postedAt || new Date().toISOString(),
       source: 'Lever ATS',
     }))
+
+  log.info('ats-refresher', 'lever: done', { company: company.name, slug: usedSlug, jobs: jobs.length })
+  return jobs
 }
 
 async function fetchGreenhouseCompanyJobs(company: {
@@ -107,17 +112,18 @@ async function fetchGreenhouseCompanyJobs(company: {
   atsIdentifier: string
 }): Promise<NormalisedJob[]> {
   const url = `https://boards-api.greenhouse.io/v1/boards/${company.atsIdentifier}/jobs?content=true`
+  log.info('ats-refresher', 'greenhouse: fetching', { company: company.name, slug: company.atsIdentifier })
   try {
     const res = await fetch(url, {
       headers: { 'User-Agent': 'skove-agent/1.0' },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     })
     if (!res.ok) {
-      log.warn('ats-refresher', 'greenhouse: fetch failed', { company: company.name, status: res.status })
+      log.warn('ats-refresher', 'greenhouse: fetch failed', { company: company.name, slug: company.atsIdentifier, status: res.status })
       return []
     }
     const data = await res.json() as { jobs?: Array<Record<string, any>> }
-    return (data.jobs ?? [])
+    const jobs = (data.jobs ?? [])
       .filter((job) => job.title && job.id)
       .map((job) => ({
         id: `greenhouse-${company.atsIdentifier}-${job.id}`,
@@ -129,8 +135,10 @@ async function fetchGreenhouseCompanyJobs(company: {
         postedAt: job.updated_at || new Date().toISOString(),
         source: 'Greenhouse ATS',
       }))
+    log.info('ats-refresher', 'greenhouse: done', { company: company.name, jobs: jobs.length })
+    return jobs
   } catch (err) {
-    log.warn('ats-refresher', 'greenhouse: network error', { company: company.name, err: (err as Error).message })
+    log.warn('ats-refresher', 'greenhouse: network error', { company: company.name, slug: company.atsIdentifier, err: (err as Error).message })
     return []
   }
 }
@@ -141,17 +149,18 @@ async function fetchAshbyCompanyJobs(company: {
 }): Promise<NormalisedJob[]> {
   // Ashby public posting API — https://developers.ashbyhq.com/docs/public-job-posting-api
   const url = `https://api.ashbyhq.com/posting-api/job-board/${company.atsIdentifier}`
+  log.info('ats-refresher', 'ashby: fetching', { company: company.name, slug: company.atsIdentifier })
   try {
     const res = await fetch(url, {
       headers: { 'User-Agent': 'skove-agent/1.0' },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     })
     if (!res.ok) {
-      log.warn('ats-refresher', 'ashby: fetch failed', { company: company.name, status: res.status })
+      log.warn('ats-refresher', 'ashby: fetch failed', { company: company.name, slug: company.atsIdentifier, status: res.status })
       return []
     }
     const json = await res.json() as { jobs?: Array<Record<string, any>> }
-    return (json.jobs ?? [])
+    const jobs = (json.jobs ?? [])
       .filter((job) => job.title && job.id && job.isListed !== false)
       .map((job) => ({
         id: `ashby-${company.atsIdentifier}-${job.id}`,
@@ -163,8 +172,10 @@ async function fetchAshbyCompanyJobs(company: {
         postedAt: job.publishedAt || new Date().toISOString(),
         source: 'Ashby ATS',
       }))
+    log.info('ats-refresher', 'ashby: done', { company: company.name, jobs: jobs.length })
+    return jobs
   } catch (err) {
-    log.warn('ats-refresher', 'ashby: network error', { company: company.name, err: (err as Error).message })
+    log.warn('ats-refresher', 'ashby: network error', { company: company.name, slug: company.atsIdentifier, err: (err as Error).message })
     return []
   }
 }
@@ -177,9 +188,17 @@ async function fetchCompanyJobs(company: {
   careersUrl: string | null
 }): Promise<NormalisedJob[]> {
   const resolvedType = inferAtsTypeFromUrl(company.careersUrl, company.atsType)
+  if (resolvedType !== company.atsType) {
+    log.info('ats-refresher', 'provider inferred from careersUrl', {
+      company: company.name,
+      stored: company.atsType,
+      resolved: resolvedType,
+    })
+  }
   if (resolvedType === 'lever') return fetchLeverCompanyJobs(company)
   if (resolvedType === 'greenhouse') return fetchGreenhouseCompanyJobs(company)
   if (resolvedType === 'ashby') return fetchAshbyCompanyJobs(company)
+  log.warn('ats-refresher', 'unsupported ats type, skipping', { company: company.name, atsType: resolvedType })
   return []
 }
 
@@ -231,8 +250,8 @@ export async function runATSCompanyRefresher(): Promise<void> {
 
   // Clean up jobs older than 14 days
   const retentionCutoff = new Date(Date.now() - RETENTION_MS)
-  await db.delete(atsJobs).where(lt(atsJobs.createdAt, retentionCutoff))
-  log.info('ats-refresher', 'old jobs cleaned up', { cutoff: retentionCutoff })
+  const deleted = await db.delete(atsJobs).where(lt(atsJobs.createdAt, retentionCutoff)).returning({ id: atsJobs.id })
+  log.info('ats-refresher', 'old jobs cleaned up', { deleted: deleted.length, cutoff: retentionCutoff })
 
   // Pick the BATCH_SIZE companies with oldest lastFetchedAt, secondary sort by ats_type
   // to naturally interleave providers across the batch

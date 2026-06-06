@@ -50,6 +50,8 @@ async function fetchStoredATSJobs(queryText: string, location: string, minSalary
   const searchText = `%${normalizeText(queryText)}%`
   const locationText = `%${normalizeText(location)}%`
 
+  log.info('job-tracker', 'db query', { titleSearch: searchText, locationSearch: locationText, minSalary })
+
   const rows = await db
     .select()
     .from(atsJobs)
@@ -62,20 +64,26 @@ async function fetchStoredATSJobs(queryText: string, location: string, minSalary
     .orderBy(desc(atsJobs.createdAt))
     .limit(100)
 
-  return rows
-    .filter((job) => minSalary === 0 || job.salaryMin == null || job.salaryMin >= minSalary)
-    .map((job) => ({
-      id: job.externalId ?? job.id,
-      title: job.title,
-      company: job.company,
-      location: job.location,
-      applyUrl: job.applyUrl,
-      salaryMin: job.salaryMin ?? undefined,
-      salaryMax: job.salaryMax ?? undefined,
-      description: job.description ?? undefined,
-      postedAt: job.postedAt,
-      source: job.source,
-    }))
+  const filtered = rows.filter((job) => minSalary === 0 || job.salaryMin == null || job.salaryMin >= minSalary)
+
+  log.info('job-tracker', 'db query result', {
+    rowsFromDb: rows.length,
+    afterSalaryFilter: filtered.length,
+    salaryFilterActive: minSalary > 0,
+  })
+
+  return filtered.map((job) => ({
+    id: job.externalId ?? job.id,
+    title: job.title,
+    company: job.company,
+    location: job.location,
+    applyUrl: job.applyUrl,
+    salaryMin: job.salaryMin ?? undefined,
+    salaryMax: job.salaryMax ?? undefined,
+    description: job.description ?? undefined,
+    postedAt: job.postedAt,
+    source: job.source,
+  }))
 }
 
 async function fetchAdzuna(what: string, where: string, minSalary: number): Promise<NormalisedJob[]> {
@@ -217,32 +225,53 @@ export async function runJobApplicationTracker(
   const what = [jobTitle, keywords].filter(Boolean).join(' ')
   const where = isRemote ? 'remote' : location
 
+  log.info('job-tracker', 'run started', { userId: ctx.userId, jobTitle, location, minSalary, keywords, atsFirstOnly })
+
   let jobs = await fetchStoredATSJobs(what, where, minSalary)
-  log.info('job-tracker', 'db query complete', { count: jobs.length, userId: ctx.userId })
+  let jobSource = 'ats_db'
 
   if (!atsFirstOnly) {
     if (jobs.length === 0) {
+      log.info('job-tracker', 'db empty, trying adzuna', { what, where })
       jobs = await fetchAdzuna(what, where, minSalary)
+      jobSource = 'adzuna'
       log.info('job-tracker', 'adzuna fetch complete', { count: jobs.length })
     }
     if (jobs.length === 0) {
+      log.info('job-tracker', 'adzuna empty, trying jsearch', { query: `${jobTitle} ${isRemote ? 'remote' : location}` })
       jobs = await fetchJSearch(`${jobTitle} ${isRemote ? 'remote' : location}`)
-      log.info('job-tracker', 'jsearch fallback complete', { count: jobs.length })
+      jobSource = 'jsearch'
+      log.info('job-tracker', 'jsearch fetch complete', { count: jobs.length })
     }
     if (jobs.length === 0 && isRemote) {
+      log.info('job-tracker', 'jsearch empty, trying remoteok', { jobTitle })
       jobs = await fetchRemoteOK(jobTitle)
-      log.info('job-tracker', 'remoteok fallback complete', { count: jobs.length })
+      jobSource = 'remoteok'
+      log.info('job-tracker', 'remoteok fetch complete', { count: jobs.length })
     }
+  } else if (jobs.length === 0) {
+    log.info('job-tracker', 'ats-first-only mode: db empty, no fallback', { userId: ctx.userId })
   }
+
+  log.info('job-tracker', 'jobs candidate pool ready', { count: jobs.length, source: jobSource, userId: ctx.userId })
 
   const deliveredRows = await db.select({ url: agentResults.url }).from(agentResults).where(eq(agentResults.userId, ctx.userId))
   const deliveredSet = new Set(deliveredRows.map((r: any) => r.url))
 
+  log.info('job-tracker', 'dedup context loaded', {
+    seenThisRun: ctx.seenKeys.size,
+    previouslyDelivered: deliveredSet.size,
+    userId: ctx.userId,
+  })
+
   const results: AgentRunResult[] = []
+  let skippedSeen = 0
+  let skippedDelivered = 0
 
   for (const job of jobs) {
     const jobKey = job.applyUrl ?? `${job.title} @ ${job.company}`
-    if (ctx.seenKeys.has(jobKey) || deliveredSet.has(job.applyUrl)) continue
+    if (ctx.seenKeys.has(jobKey)) { skippedSeen++; continue }
+    if (deliveredSet.has(job.applyUrl)) { skippedDelivered++; continue }
 
     const salary = formatSalary(job.salaryMin, job.salaryMax)
     results.push({
@@ -262,6 +291,12 @@ export async function runJobApplicationTracker(
     })
   }
 
-  log.info('job-tracker', 'run complete', { new: results.length, userId: ctx.userId })
+  log.info('job-tracker', 'run complete', {
+    userId: ctx.userId,
+    candidatePool: jobs.length,
+    skippedSeen,
+    skippedDelivered,
+    newResults: results.length,
+  })
   return results
 }
