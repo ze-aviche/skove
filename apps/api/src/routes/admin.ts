@@ -1,11 +1,12 @@
 import { Router } from 'express'
 import { requireAuth } from '../lib/auth.js'
 import { db } from '../db/index.js'
-import { users, agentInstances, agentResults } from '../db/schema.js'
+import { users, agentInstances, agentResults, atsJobs, atsCompanies } from '../db/schema.js'
 import { eq, sql } from 'drizzle-orm'
 import { clerkClient } from '@clerk/clerk-sdk-node'
 import { log } from '../lib/logger.js'
 import { z } from 'zod'
+import { runATSCompanyRefresher } from '../runner/agents/ats-company-refresher.js'
 
 export const adminRouter = Router()
 
@@ -141,6 +142,43 @@ adminRouter.patch('/users/:id/plan', requireAuth, requireAdmin, async (req, res)
     log.error('admin', 'PATCH /api/admin/users/:id/plan failed', err, { targetUserId: req.params.id })
     res.status(500).json({ error: 'Failed to update plan' })
   }
+})
+
+// GET /api/admin/ats/status — ATS pipeline health snapshot
+adminRouter.get('/ats/status', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const [jobCount, companyCount, pendingCount, lastFetchedRow] = await Promise.all([
+      db.select({ count: sql<number>`count(*)` }).from(atsJobs).then(r => Number(r[0].count)),
+      db.select({ count: sql<number>`count(*)` }).from(atsCompanies).where(eq(atsCompanies.isEnabled, true)).then(r => Number(r[0].count)),
+      db.select({ count: sql<number>`count(*)` }).from(atsCompanies).where(sql`${atsCompanies.lastFetchedAt} IS NULL AND ${atsCompanies.isEnabled} = true`).then(r => Number(r[0].count)),
+      db.select({ lastFetchedAt: atsCompanies.lastFetchedAt }).from(atsCompanies).where(sql`${atsCompanies.lastFetchedAt} IS NOT NULL`).orderBy(sql`${atsCompanies.lastFetchedAt} DESC`).limit(1),
+    ])
+    res.json({
+      jobsInDb: jobCount,
+      enabledCompanies: companyCount,
+      neverFetched: pendingCount,
+      lastFetchedAt: lastFetchedRow[0]?.lastFetchedAt ?? null,
+    })
+  } catch (err) {
+    log.error('admin', 'GET /api/admin/ats/status failed', err)
+    res.status(500).json({ error: 'Failed to fetch ATS status' })
+  }
+})
+
+// POST /api/admin/ats/refresh — trigger an immediate ATS refresh run
+let atsRefreshRunning = false
+
+adminRouter.post('/ats/refresh', requireAuth, requireAdmin, async (req, res) => {
+  if (atsRefreshRunning) {
+    return res.status(409).json({ error: 'A refresh is already in progress' })
+  }
+  atsRefreshRunning = true
+  log.info('admin', 'manual ats refresh triggered', { adminId: req.userId })
+  res.json({ message: 'ATS refresh started' })
+
+  runATSCompanyRefresher()
+    .catch((err) => log.error('admin', 'manual ats refresh failed', err))
+    .finally(() => { atsRefreshRunning = false })
 })
 
 // DELETE /api/admin/users/:id — delete user from DB + Clerk

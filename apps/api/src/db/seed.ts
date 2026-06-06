@@ -31,7 +31,6 @@ const builtInAgents = [
       location: { type: 'string', label: 'Location', required: true, placeholder: 'Remote / Austin, TX' },
       minSalary: { type: 'number', label: 'Minimum salary ($)', required: false },
       keywords: { type: 'string', label: 'Keywords', required: false, placeholder: 'PM, product, roadmap' },
-      atsCompanies: { type: 'string', label: 'ATS companies (comma-separated)', required: false, placeholder: 'Amazon, Google, Salesforce' },
       atsFirstOnly: { type: 'boolean', label: 'ATS-first only', required: false, placeholder: 'Only use Lever, Greenhouse, and Ashby sources' },
       matchThreshold: { type: 'number', label: 'Min AI match score (1–10)', required: false, placeholder: '7' },
       frequency: { type: 'select', label: 'Check frequency', required: false, options: ['Every 6 hours', 'Every 12 hours', 'Daily'], placeholder: 'Every 12 hours' },

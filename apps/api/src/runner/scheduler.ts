@@ -62,6 +62,9 @@ export async function startScheduler() {
     runATSCompanyRefresher().catch((err) => log.error('scheduler', 'ats refresher failed', err))
   })
 
+  // Kick off an immediate first run so ats_jobs isn't empty until the next top-of-hour
+  runATSCompanyRefresher().catch((err) => log.error('scheduler', 'ats initial refresh failed', err))
+
   // Morning digest — every day at 8am
   cron.schedule('0 8 * * *', () => {
     sendMorningDigest().catch((err) => log.error('scheduler', 'morning digest failed', err))
