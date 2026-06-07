@@ -16,8 +16,13 @@ export async function cleanupStaleJobs(): Promise<{ deleted: number; remaining: 
   const result = await db.delete(atsJobs).where(
     sql`
       (${atsJobs.createdAt} < ${sevenDaysAgo})
-      OR
-      (${atsJobs.locationSearch} NOT IN (${TARGET_COUNTRIES.join(", ")}))
+      OR NOT (
+        ${atsJobs.locationSearch} LIKE '%us%'
+        OR ${atsJobs.locationSearch} LIKE '%india%'
+        OR ${atsJobs.locationSearch} LIKE '%australia%'
+        OR ${atsJobs.locationSearch} LIKE '%uk%'
+        OR ${atsJobs.locationSearch} LIKE '%remote%'
+      )
     `
   ).returning()
 
