@@ -315,8 +315,6 @@ export default function ExplorePage() {
                             </>
                           )}
                           <span style={{ color: 'var(--text-tertiary)' }}>·</span>
-                          <span style={{ color: 'var(--text-tertiary)' }}>{job.source}</span>
-                          <span style={{ color: 'var(--text-tertiary)' }}>·</span>
                           <span style={{ color: 'var(--text-tertiary)' }}>{postedLabel(job.postedAt)}</span>
                         </div>
                       </div>
