@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { apiUrl } from '@/lib/api'
+import { fetchSuggestions } from '@/lib/api'
 
 type Props = {
   value: string
@@ -33,12 +33,9 @@ export default function CompanyPicker({ value, onChange, placeholder, token }: P
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`${apiUrl}/api/jobs/suggestions?field=company&q=${encodeURIComponent(input)}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        })
-        const data = await res.json()
+        const data = await fetchSuggestions('company', input, token)
         setSuggestions((data || []).filter((s: string) => !tags.includes(s)))
-      } catch (err) {
+      } catch {
         setSuggestions([])
       }
     }, 200)

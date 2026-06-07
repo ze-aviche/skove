@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { apiUrl } from '@/lib/api'
+import { fetchSuggestions } from '@/lib/api'
 
 type Props = {
   value: string // stored as comma-separated, e.g. "Software Engineer, Data Scientist"
@@ -34,12 +34,9 @@ export default function JobTitlePicker({ value, onChange, placeholder, token }: 
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`${apiUrl}/api/jobs/suggestions?field=title&q=${encodeURIComponent(input)}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        })
-        const data = await res.json()
+        const data = await fetchSuggestions('title', input, token)
         setSuggestions((data || []).filter((s: string) => !tags.includes(s)))
-      } catch (err) {
+      } catch {
         setSuggestions([])
       }
     }, 200)

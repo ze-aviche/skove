@@ -252,6 +252,10 @@ export function toggleFavourite(resultId: string, token?: string): Promise<Agent
   })
 }
 
+export function fetchSuggestions(field: 'title' | 'company', q: string, token?: string): Promise<string[]> {
+  return fetchJson(`/api/jobs/suggestions?field=${field}&q=${encodeURIComponent(q)}`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
+}
+
 export function searchJobs(
   params: { title?: string; company?: string; location?: string; specialization?: string; page?: number; limit?: number },
   token?: string,
