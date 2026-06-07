@@ -39,25 +39,11 @@ jobsRouter.get('/search', requireAuth, async (req, res) => {
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 25))
     const offset = (page - 1) * limit
 
+    // Build conditions in selectivity order: location → company → title
+    // (specialization is handled via JOIN below, applied before these)
     const conditions = []
 
-    // Handle multiple comma-separated values with OR logic
-    if (title) {
-      const titles = title.split(',').map(t => t.trim()).filter(Boolean)
-      if (titles.length > 0) {
-        const titleConds = titles.map(t => sql`${atsJobs.titleSearch} like ${'%' + normalizeText(t) + '%'}`)
-        conditions.push(titles.length === 1 ? titleConds[0] : or(...titleConds))
-      }
-    }
-
-    if (company) {
-      const companies = company.split(',').map(c => c.trim()).filter(Boolean)
-      if (companies.length > 0) {
-        const companyConds = companies.map(c => sql`${atsJobs.companySearch} like ${'%' + normalizeText(c) + '%'}`)
-        conditions.push(companies.length === 1 ? companyConds[0] : or(...companyConds))
-      }
-    }
-
+    // 1. Location — most selective (only 4 countries + remote)
     if (location) {
       const locations = location.split(',').map(l => l.trim()).filter(Boolean)
       if (locations.length > 0) {
@@ -66,15 +52,31 @@ jobsRouter.get('/search', requireAuth, async (req, res) => {
       }
     }
 
+    // 2. Company — more selective than title
+    if (company) {
+      const companies = company.split(',').map(c => c.trim()).filter(Boolean)
+      if (companies.length > 0) {
+        const companyConds = companies.map(c => sql`${atsJobs.companySearch} like ${'%' + normalizeText(c) + '%'}`)
+        conditions.push(companies.length === 1 ? companyConds[0] : or(...companyConds))
+      }
+    }
+
+    // 3. Title — least selective (broadest match)
+    if (title) {
+      const titles = title.split(',').map(t => t.trim()).filter(Boolean)
+      if (titles.length > 0) {
+        const titleConds = titles.map(t => sql`${atsJobs.titleSearch} like ${'%' + normalizeText(t) + '%'}`)
+        conditions.push(titles.length === 1 ? titleConds[0] : or(...titleConds))
+      }
+    }
+
     const where = conditions.length > 0 ? and(...conditions) : undefined
 
-    // If specialization filter, join with ats_companies using case-insensitive name match
+    // 4. Specialization — via INNER JOIN (applied first by Postgres as most selective)
     if (specialization) {
-      // Use lower() on both sides to handle name mismatches like "Path Robotics" vs "path robotics"
       const joinCondition = sql`lower(${atsJobs.company}) = lower(${atsCompanies.name})`
-      // Exact specialization match to avoid "CCaaS" matching "Not CCaaS"
       const specializationCondition = sql`lower(${atsCompanies.specialization}) = lower(${specialization})`
-      const specWhere = and(where, specializationCondition)
+      const specWhere = and(specializationCondition, where)
 
       const [{ total }] = await db
         .select({ total: sql<string>`count(*)` })
@@ -94,7 +96,7 @@ jobsRouter.get('/search', requireAuth, async (req, res) => {
       return res.json({ jobs: jobs.map(r => r.job), total: Number(total), page, limit })
     }
 
-    // Standard query without specialization filter
+    // Standard query without specialization
     const [{ total }] = await db
       .select({ total: sql<string>`count(*)` })
       .from(atsJobs)
