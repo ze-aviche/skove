@@ -5,6 +5,7 @@ import { db } from '../db/index.js'
 import { agentInstances, agentDefinitions, agentResults, users } from '../db/schema.js'
 import { agentRunners } from './agents/index.js'
 import { runATSCompanyRefresher } from './agents/ats-company-refresher.js'
+import { cleanupStaleJobs } from '../db/cleanup-jobs.js'
 import { sendAlertEmail, sendDailyDigest, DigestItem } from '../lib/email.js'
 import { log } from '../lib/logger.js'
 
@@ -57,9 +58,15 @@ export async function startScheduler() {
     scheduleInstance(row.agent_instances.id, cronExpr)
   }
 
-  // ATS company refresh — every hour, processes 200 companies per run
-  cron.schedule('0 * * * *', () => {
-    runATSCompanyRefresher().catch((err) => log.error('scheduler', 'ats refresher failed', err))
+  // ATS company refresh — every hour, then cleanup stale jobs
+  cron.schedule('0 * * * *', async () => {
+    try {
+      await runATSCompanyRefresher()
+      const cleanup = await cleanupStaleJobs()
+      log.info('scheduler', 'ats refresh + cleanup complete', { deleted: cleanup.deleted, remaining: cleanup.remaining })
+    } catch (err) {
+      log.error('scheduler', 'ats refresh/cleanup failed', err)
+    }
   })
 
   // Kick off an immediate first run so ats_jobs isn't empty until the next top-of-hour
