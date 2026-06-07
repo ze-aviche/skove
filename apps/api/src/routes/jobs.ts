@@ -15,6 +15,14 @@ function normalizeText(value?: string) {
 function buildLocationPattern(loc: string): string {
   const n = normalizeText(loc)
   if (n.includes('remote') || n.includes('wfh')) return '%remote%'
+
+  // Handle country-level searches: "US" → match "us" in location
+  if (n === 'us' || n === 'usa' || n === 'united states') return '%us%'
+  if (n === 'uk' || n === 'gb' || n === 'united kingdom') return '%uk%'
+  if (n === 'ca' || n === 'canada') return '%ca%'
+  if (n === 'au' || n === 'australia') return '%australia%'
+
+  // For city searches, extract the first part (before comma) or use as-is
   const city = n.split(',')[0].trim()
   return `%${city}%`
 }

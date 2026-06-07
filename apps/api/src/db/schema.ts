@@ -86,6 +86,7 @@ export const atsCompanies = pgTable('ats_companies', {
   atsType: text('ats_type').notNull(),
   atsIdentifier: text('ats_identifier').notNull().unique(),
   isEnabled: boolean('is_enabled').default(true).notNull(),
+  specialization: text('specialization'), // e.g. CCaaS, DevTools, Database, FinTech, HR Tech, API
   lastFetchedAt: timestamp('last_fetched_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

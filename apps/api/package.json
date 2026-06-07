@@ -12,6 +12,11 @@
     "db:seed": "tsx src/db/seed.ts",
     "db:seed-ats-companies": "tsx src/db/seed-ats-companies.ts",
     "db:seed-ccaas": "tsx src/db/seed-ccaas-companies.ts",
+    "db:classify": "tsx src/db/classify-companies.ts",
+    "db:enrich-locations": "tsx src/db/enrich-locations.ts",
+    "db:enrich-locations-ai": "tsx src/db/enrich-locations-ai.ts",
+    "db:enrich-locations-apply": "tsx src/db/enrich-locations-apply.ts",
+    "db:normalize-locations": "tsx src/db/normalize-locations.ts",
     "db:studio": "drizzle-kit studio --config ./drizzle.config.ts"
   },
   "dependencies": {

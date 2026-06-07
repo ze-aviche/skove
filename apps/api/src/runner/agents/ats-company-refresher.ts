@@ -25,6 +25,43 @@ function normalizeText(value?: string) {
   return String(value ?? '').trim().toLowerCase()
 }
 
+// Map common cities to their country/state for better searchability
+const CITY_TO_LOCATION: Record<string, string> = {
+  'san francisco': 'san francisco, ca, us',
+  'new york': 'new york, ny, us',
+  'los angeles': 'los angeles, ca, us',
+  'chicago': 'chicago, il, us',
+  'austin': 'austin, tx, us',
+  'seattle': 'seattle, wa, us',
+  'london': 'london, uk',
+  'toronto': 'toronto, on, ca',
+  'vancouver': 'vancouver, bc, ca',
+  'berlin': 'berlin, germany',
+  'paris': 'paris, france',
+  'singapore': 'singapore, sg',
+  'sydney': 'sydney, australia',
+  'tokyo': 'tokyo, japan',
+  'dubai': 'dubai, uae',
+  'bangalore': 'bangalore, india',
+  'mumbai': 'mumbai, india',
+  'remote': 'remote',
+}
+
+function enrichLocation(location: string): string {
+  const normalized = location.trim().toLowerCase()
+  if (normalized.includes('remote')) return 'Remote'
+
+  // Check if it's a known city that needs enrichment
+  const enriched = CITY_TO_LOCATION[normalized]
+  if (enriched) return enriched
+
+  // If it already has a comma (like "San Francisco, CA"), keep it as is
+  if (normalized.includes(',')) return location
+
+  // Return as-is if we can't enrich it
+  return location
+}
+
 function inferAtsTypeFromUrl(careersUrl: string | null | undefined, currentType: string): string {
   if (!careersUrl) return currentType
   const url = careersUrl.toLowerCase()
@@ -293,23 +330,26 @@ async function fetchCompanyJobs(company: {
 async function persistJobs(jobs: NormalisedJob[]): Promise<void> {
   if (jobs.length === 0) return
   const now = new Date()
-  const rows = jobs.map((job) => ({
-    source: job.source,
-    externalId: job.id,
-    applyUrl: job.applyUrl,
-    title: job.title,
-    company: job.company,
-    location: job.location,
-    salaryMin: job.salaryMin,
-    salaryMax: job.salaryMax,
-    description: job.description,
-    postedAt: job.postedAt,
-    metadata: { source: job.source },
-    titleSearch: normalizeText(job.title),
-    companySearch: normalizeText(job.company),
-    locationSearch: normalizeText(job.location),
-    createdAt: now,
-  }))
+  const rows = jobs.map((job) => {
+    const enrichedLocation = enrichLocation(job.location)
+    return {
+      source: job.source,
+      externalId: job.id,
+      applyUrl: job.applyUrl,
+      title: job.title,
+      company: job.company,
+      location: enrichedLocation,
+      salaryMin: job.salaryMin,
+      salaryMax: job.salaryMax,
+      description: job.description,
+      postedAt: job.postedAt,
+      metadata: { source: job.source },
+      titleSearch: normalizeText(job.title),
+      companySearch: normalizeText(job.company),
+      locationSearch: normalizeText(enrichedLocation),
+      createdAt: now,
+    }
+  })
   await db.insert(atsJobs).values(rows).onConflictDoNothing({ target: atsJobs.applyUrl })
 }
 
