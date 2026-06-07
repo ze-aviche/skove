@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { db } from '../db/index.js'
 import { atsJobs, atsCompanies, agentResults, users } from '../db/schema.js'
-import { and, desc, eq, sql, ilike } from 'drizzle-orm'
+import { and, or, desc, eq, sql, ilike } from 'drizzle-orm'
 import { requireAuth } from '../lib/auth.js'
 import { log } from '../lib/logger.js'
 import { scoreJobMatch, tailorResume } from '../lib/claude.js'
@@ -40,33 +40,63 @@ jobsRouter.get('/search', requireAuth, async (req, res) => {
     const offset = (page - 1) * limit
 
     const conditions: ReturnType<typeof sql>[] = []
-    if (title)    conditions.push(sql`${atsJobs.titleSearch} like ${'%' + normalizeText(title) + '%'}`)
-    if (company)  conditions.push(sql`${atsJobs.companySearch} like ${'%' + normalizeText(company) + '%'}`)
-    if (location) conditions.push(sql`${atsJobs.locationSearch} like ${buildLocationPattern(location)}`)
+
+    // Handle multiple comma-separated values with OR logic
+    if (title) {
+      const titles = title.split(',').map(t => t.trim()).filter(Boolean)
+      if (titles.length > 0) {
+        const titleConditions = titles.map(t => sql`${atsJobs.titleSearch} like ${'%' + normalizeText(t) + '%'}`)
+        conditions.push(titleConditions.length === 1 ? titleConditions[0] : sql`(${or(...titleConditions)})`
+        )
+      }
+    }
+
+    if (company) {
+      const companies = company.split(',').map(c => c.trim()).filter(Boolean)
+      if (companies.length > 0) {
+        const companyConditions = companies.map(c => sql`${atsJobs.companySearch} like ${'%' + normalizeText(c) + '%'}`)
+        conditions.push(companyConditions.length === 1 ? companyConditions[0] : sql`(${or(...companyConditions)})`
+        )
+      }
+    }
+
+    if (location) {
+      const locations = location.split(',').map(l => l.trim()).filter(Boolean)
+      if (locations.length > 0) {
+        const locationConditions = locations.map(l => sql`${atsJobs.locationSearch} like ${buildLocationPattern(l)}`)
+        conditions.push(locationConditions.length === 1 ? locationConditions[0] : sql`(${or(...locationConditions)})`
+        )
+      }
+    }
 
     const where = conditions.length > 0 ? and(...conditions) : undefined
 
     let query = db.select().from(atsJobs).where(where)
 
-    // If specialization filter, join with ats_companies
+    // If specialization filter, join with ats_companies using case-insensitive name match
     if (specialization) {
-      query = db
-        .select({ job: atsJobs })
-        .from(atsJobs)
-        .innerJoin(atsCompanies, eq(atsJobs.company, atsCompanies.name))
-        .where(and(where, ilike(atsCompanies.specialization, `%${specialization}%`)))
-        .limit(limit)
-        .offset(offset)
+      // Use lower() on both sides to handle name mismatches like "Path Robotics" vs "path robotics"
+      const joinCondition = sql`lower(${atsJobs.company}) = lower(${atsCompanies.name})`
+      // Exact specialization match to avoid "CCaaS" matching "Not CCaaS"
+      const specializationCondition = sql`lower(${atsCompanies.specialization}) = lower(${specialization})`
+      const specWhere = and(where, specializationCondition)
 
       const [{ total }] = await db
         .select({ total: sql<string>`count(*)` })
         .from(atsJobs)
-        .innerJoin(atsCompanies, eq(atsJobs.company, atsCompanies.name))
-        .where(and(where, ilike(atsCompanies.specialization, `%${specialization}%`)))
+        .innerJoin(atsCompanies, joinCondition)
+        .where(specWhere)
 
-      const jobsResult = await query
-      const jobs = jobsResult.map(r => r.job)
-      return res.json({ jobs, total: Number(total), page, limit })
+      const jobs = await db
+        .select({ job: atsJobs })
+        .from(atsJobs)
+        .innerJoin(atsCompanies, joinCondition)
+        .where(specWhere)
+        .orderBy(desc(atsJobs.createdAt))
+        .limit(limit)
+        .offset(offset)
+
+      return res.json({ jobs: jobs.map(r => r.job), total: Number(total), page, limit })
     }
 
     // Standard query without specialization filter
@@ -87,6 +117,41 @@ jobsRouter.get('/search', requireAuth, async (req, res) => {
   } catch (err) {
     log.error('api', 'GET /api/jobs/search failed', err)
     res.status(500).json({ error: 'Search failed' })
+  }
+})
+
+// GET /api/jobs/suggestions — get autocomplete suggestions
+jobsRouter.get('/suggestions', requireAuth, async (req, res) => {
+  try {
+    const field = String(req.query.field ?? '').trim().toLowerCase()
+    const q = String(req.query.q ?? '').trim().toLowerCase()
+
+    if (!field || !q || q.length < 1) {
+      return res.json([])
+    }
+
+    let suggestions: string[] = []
+
+    if (field === 'title') {
+      const results = await db
+        .selectDistinct({ title: atsJobs.title })
+        .from(atsJobs)
+        .where(sql`${atsJobs.titleSearch} LIKE ${`%${normalizeText(q)}%`}`)
+        .limit(10)
+      suggestions = results.map((r) => r.title).filter(Boolean)
+    } else if (field === 'company') {
+      const results = await db
+        .selectDistinct({ company: atsJobs.company })
+        .from(atsJobs)
+        .where(sql`${atsJobs.companySearch} LIKE ${`%${normalizeText(q)}%`}`)
+        .limit(10)
+      suggestions = results.map((r) => r.company).filter(Boolean)
+    }
+
+    res.json(suggestions)
+  } catch (err) {
+    log.error('api', 'GET /api/jobs/suggestions failed', err)
+    res.status(500).json({ error: 'Failed to fetch suggestions' })
   }
 })
 

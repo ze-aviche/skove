@@ -4,6 +4,9 @@ import { useState, useRef } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
 import { searchJobs, saveAndScoreJob, downloadDocument, AtsJob, AgentResult } from '@/lib/api'
+import JobTitlePicker from '@/components/JobTitlePicker'
+import CompanyPicker from '@/components/CompanyPicker'
+import LocationTagsPicker from '@/components/LocationTagsPicker'
 
 const PAGE_SIZE = 25
 
@@ -44,6 +47,7 @@ export default function ExplorePage() {
   const [companyQ, setCompanyQ] = useState('')
   const [locationQ, setLocationQ] = useState('')
   const [specializationQ, setSpecializationQ] = useState('')
+  const [token, setToken] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(false)
 
   // Specializations dropdown
@@ -80,7 +84,9 @@ export default function ExplorePage() {
     setLoading(true)
     setExpandedId(null)
     try {
-      const token = await getToken()
+      const tok = await getToken()
+      setToken(tok ?? undefined)
+      const token = tok
       const res = await searchJobs({ title: titleQ, company: companyQ, location: locationQ, specialization: specializationQ, page: newPage, limit: PAGE_SIZE }, token)
       setJobs(res.jobs.map(j => ({ atsJob: j })))
       setTotal(res.total)
@@ -150,38 +156,48 @@ export default function ExplorePage() {
         flexDirection: 'column',
         gap: 12,
       }}>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <input
-            style={inputStyle}
-            placeholder="Job title (e.g. Contact Center Engineer)"
-            value={titleQ}
-            onChange={e => setTitleQ(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && doSearch(1)}
-          />
-          <input
-            style={inputStyle}
-            placeholder="Company (e.g. Genesys, Five9)"
-            value={companyQ}
-            onChange={e => setCompanyQ(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && doSearch(1)}
-          />
-          <input
-            style={inputStyle}
-            placeholder="Location (e.g. Remote, Dallas TX)"
-            value={locationQ}
-            onChange={e => setLocationQ(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && doSearch(1)}
-          />
-          <select
-            style={{...inputStyle, appearance: 'none', paddingRight: 32}}
-            value={specializationQ}
-            onChange={e => setSpecializationQ(e.target.value)}
-          >
-            <option value="">All specializations</option>
-            {specializations.map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 4, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Job Title</div>
+            <JobTitlePicker
+              value={titleQ}
+              onChange={setTitleQ}
+              placeholder="Software Engineer, Data Scientist…"
+              token={token}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 4, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Company</div>
+            <CompanyPicker
+              value={companyQ}
+              onChange={setCompanyQ}
+              placeholder="Genesys, Five9, NICE…"
+              token={token}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 4, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Location</div>
+            <LocationTagsPicker
+              value={locationQ}
+              onChange={setLocationQ}
+              placeholder="Remote, Dallas TX…"
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 4, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Specialization</div>
+            <select
+              style={{ ...inputStyle, width: '100%', height: 42, appearance: 'none' }}
+              value={specializationQ}
+              onChange={e => setSpecializationQ(e.target.value)}
+            >
+              <option value="">All specializations</option>
+              {specializations.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button
             onClick={() => doSearch(1)}
             disabled={loading}
