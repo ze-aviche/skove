@@ -43,7 +43,11 @@ export default function ExplorePage() {
   const [titleQ, setTitleQ] = useState('')
   const [companyQ, setCompanyQ] = useState('')
   const [locationQ, setLocationQ] = useState('')
+  const [specializationQ, setSpecializationQ] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Specializations dropdown
+  const specializations = ['AI/ML', 'CCaaS', 'Communication', 'Database', 'DevTools', 'E-commerce', 'FinTech', 'HR Tech', 'Infrastructure', 'Marketing/Analytics', 'Other']
 
   // Results state
   const [jobs, setJobs] = useState<ScoredJob[]>([])
@@ -69,7 +73,7 @@ export default function ExplorePage() {
   }
 
   const doSearch = async (newPage = 1) => {
-    if (!titleQ && !companyQ && !locationQ) {
+    if (!titleQ && !companyQ && !locationQ && !specializationQ) {
       showToast({ message: 'Enter at least one search term', variant: 'error' })
       return
     }
@@ -77,7 +81,7 @@ export default function ExplorePage() {
     setExpandedId(null)
     try {
       const token = await getToken()
-      const res = await searchJobs({ title: titleQ, company: companyQ, location: locationQ, page: newPage, limit: PAGE_SIZE }, token)
+      const res = await searchJobs({ title: titleQ, company: companyQ, location: locationQ, specialization: specializationQ, page: newPage, limit: PAGE_SIZE }, token)
       setJobs(res.jobs.map(j => ({ atsJob: j })))
       setTotal(res.total)
       setPage(newPage)
@@ -168,6 +172,16 @@ export default function ExplorePage() {
             onChange={e => setLocationQ(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && doSearch(1)}
           />
+          <select
+            style={{...inputStyle, appearance: 'none', paddingRight: 32}}
+            value={specializationQ}
+            onChange={e => setSpecializationQ(e.target.value)}
+          >
+            <option value="">All specializations</option>
+            {specializations.map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
           <button
             onClick={() => doSearch(1)}
             disabled={loading}

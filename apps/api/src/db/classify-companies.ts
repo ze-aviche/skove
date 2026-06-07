@@ -2,6 +2,7 @@ import { config } from 'dotenv'
 config({ path: '.env.local' })
 
 import Anthropic from '@anthropic-ai/sdk'
+import { eq } from 'drizzle-orm'
 import { db } from './index.js'
 import { atsCompanies } from './schema.js'
 
@@ -27,19 +28,21 @@ interface ClassifyRequest {
 }
 
 async function classifyBatch(companies: ClassifyRequest[]): Promise<Record<string, string>> {
-  const prompt = `Return ONLY valid JSON with no markdown, no explanation.
-Classify these companies:
+  const prompt = `Classify these ${companies.length} companies into ONE category each.
 
-${companies.map((c) => c.name).join('\n')}
+Companies:
+${companies.map((c, i) => `${i + 1}. ${c.name}`).join('\n')}
 
-Use categories: CCaaS, DevTools, Database, FinTech, HR Tech, Infrastructure, AI/ML, E-commerce, Communication, Marketing/Analytics, or Other.
+Categories: CCaaS, DevTools, Database, FinTech, HR Tech, Infrastructure, AI/ML, E-commerce, Communication, Marketing/Analytics, Other
 
-Format: {"Company": "Category"}`
+IMPORTANT: Return ONLY valid JSON. Each company gets exactly ONE category.
+Format: {"Company Name": "Category"}
+NO markdown, NO code blocks, NO explanations.`
 
   try {
     const response = await client.messages.create({
       model: 'claude-haiku-4-5',
-      max_tokens: 1500,
+      max_tokens: 2000,
       messages: [{ role: 'user', content: prompt }],
     })
 
@@ -50,14 +53,24 @@ Format: {"Company": "Category"}`
     const jsonEnd = text.lastIndexOf('}')
 
     if (jsonStart === -1 || jsonEnd === -1 || jsonStart > jsonEnd) {
-      console.error(`No valid JSON found in response`)
+      console.error(`[BATCH ERROR] No JSON found. Response preview: ${text.substring(0, 100)}`)
       return {}
     }
 
     const jsonText = text.substring(jsonStart, jsonEnd + 1)
-    return JSON.parse(jsonText)
+    const parsed = JSON.parse(jsonText)
+
+    // Validate: check that we got entries for all companies
+    const received = Object.keys(parsed).length
+    console.log(`  [BATCH] Received ${received}/${companies.length} classifications`)
+
+    if (received < companies.length * 0.8) {
+      console.warn(`  [WARNING] Got only ${received}% of expected responses`)
+    }
+
+    return parsed
   } catch (e) {
-    console.error(`Parse error: ${(e as Error).message}`)
+    console.error(`  [PARSE ERROR] ${(e as Error).message}`)
     return {}
   }
 }
@@ -92,9 +105,13 @@ async function main() {
         await db
           .update(atsCompanies)
           .set({ specialization })
-          .where(atsCompanies.id == company.id)
+          .where(eq(atsCompanies.id, company.id))
         classified++
-        if (classified % 10 === 0) {
+
+        // Log a sample to see the distribution
+        if (classified <= 10 || classified % 100 === 0) {
+          console.log(`    → ${company.name}: ${specialization}`)
+        } else if (classified % 10 === 0) {
           console.log(`  Classified ${classified}...`)
         }
       }

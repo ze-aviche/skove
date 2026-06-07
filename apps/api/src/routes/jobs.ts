@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { db } from '../db/index.js'
-import { atsJobs, agentResults, users } from '../db/schema.js'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { atsJobs, atsCompanies, agentResults, users } from '../db/schema.js'
+import { and, desc, eq, sql, ilike } from 'drizzle-orm'
 import { requireAuth } from '../lib/auth.js'
 import { log } from '../lib/logger.js'
 import { scoreJobMatch, tailorResume } from '../lib/claude.js'
@@ -27,13 +27,14 @@ function buildLocationPattern(loc: string): string {
   return `%${city}%`
 }
 
-// GET /api/jobs/search — query ats_jobs directly
-// Query params: title, company, location, page (default 1), limit (default 25, max 50)
+// GET /api/jobs/search — query ats_jobs with optional specialization filter
+// Query params: title, company, location, specialization, page (default 1), limit (default 25, max 50)
 jobsRouter.get('/search', requireAuth, async (req, res) => {
   try {
     const title = String(req.query.title ?? '').trim()
     const company = String(req.query.company ?? '').trim()
     const location = String(req.query.location ?? '').trim()
+    const specialization = String(req.query.specialization ?? '').trim()
     const page = Math.max(1, Number(req.query.page) || 1)
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 25))
     const offset = (page - 1) * limit
@@ -45,6 +46,30 @@ jobsRouter.get('/search', requireAuth, async (req, res) => {
 
     const where = conditions.length > 0 ? and(...conditions) : undefined
 
+    let query = db.select().from(atsJobs).where(where)
+
+    // If specialization filter, join with ats_companies
+    if (specialization) {
+      query = db
+        .select({ job: atsJobs })
+        .from(atsJobs)
+        .innerJoin(atsCompanies, eq(atsJobs.company, atsCompanies.name))
+        .where(and(where, ilike(atsCompanies.specialization, `%${specialization}%`)))
+        .limit(limit)
+        .offset(offset)
+
+      const [{ total }] = await db
+        .select({ total: sql<string>`count(*)` })
+        .from(atsJobs)
+        .innerJoin(atsCompanies, eq(atsJobs.company, atsCompanies.name))
+        .where(and(where, ilike(atsCompanies.specialization, `%${specialization}%`)))
+
+      const jobsResult = await query
+      const jobs = jobsResult.map(r => r.job)
+      return res.json({ jobs, total: Number(total), page, limit })
+    }
+
+    // Standard query without specialization filter
     const [{ total }] = await db
       .select({ total: sql<string>`count(*)` })
       .from(atsJobs)

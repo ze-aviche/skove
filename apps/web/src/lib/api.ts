@@ -253,15 +253,16 @@ export function toggleFavourite(resultId: string, token?: string): Promise<Agent
 }
 
 export function searchJobs(
-  params: { title?: string; company?: string; location?: string; page?: number; limit?: number },
+  params: { title?: string; company?: string; location?: string; specialization?: string; page?: number; limit?: number },
   token?: string,
 ): Promise<{ jobs: AtsJob[]; total: number; page: number; limit: number }> {
   const qs = new URLSearchParams()
-  if (params.title)    qs.set('title',    params.title)
-  if (params.company)  qs.set('company',  params.company)
-  if (params.location) qs.set('location', params.location)
-  if (params.page)     qs.set('page',     String(params.page))
-  if (params.limit)    qs.set('limit',    String(params.limit))
+  if (params.title)         qs.set('title',         params.title)
+  if (params.company)       qs.set('company',       params.company)
+  if (params.location)      qs.set('location',      params.location)
+  if (params.specialization) qs.set('specialization', params.specialization)
+  if (params.page)          qs.set('page',          String(params.page))
+  if (params.limit)         qs.set('limit',         String(params.limit))
   return fetchJson(`/api/jobs/search?${qs}`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
 }
 
