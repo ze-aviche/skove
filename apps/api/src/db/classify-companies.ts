@@ -10,16 +10,17 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 // Taxonomy of company specializations
 const TAXONOMY = `
-Cloud/Contact Center (CCaaS): Contact center platforms, customer service software, IVR systems, workforce management
-DevTools/Dev Platforms: Developer tools, IDEs, version control, CI/CD, monitoring, observability, API management
-Database/Data: Database systems, data warehouses, analytics, data pipelines, search engines
-FinTech: Financial services, payments, accounting, trading, investment platforms
-HR Tech: Human resources, recruitment, employee engagement, learning management
-Infrastructure/Cloud: Cloud infrastructure, container orchestration, networking, security
-AI/ML: Machine learning platforms, LLMs, AI tools, data science
-E-commerce: Online retail platforms, shopping carts, marketplace software
-Communication: Email, messaging, VoIP, video conferencing, collaboration tools
-Marketing/Analytics: Marketing automation, CRM, analytics, customer data, advertising
+CCaaS: PURE contact center and customer service platform companies ONLY. Examples: Genesys, Five9, NICE, Talkdesk, Avaya, RingCentral (CCaaS division), Vonage, 8x8, Cisco (Webex CC), Amazon Connect, Twilio Flex. Do NOT use this for CRM, sales tools, or broad SaaS companies even if they have a contact center product.
+DevTools: Developer tools, IDEs, version control, CI/CD pipelines, monitoring, observability, API management, code review. Examples: GitHub, GitLab, Datadog, PagerDuty, Postman, JFrog.
+Database: Database systems, data warehouses, data pipelines, search engines, analytics infrastructure. Examples: Snowflake, Databricks, MongoDB, Elastic, Confluent, dbt Labs.
+FinTech: Financial services, payments, banking software, trading platforms, accounting, insurance tech. Examples: Stripe, Plaid, Brex, Rippling (finance), QuickBooks.
+HR Tech: Human resources, recruitment ATS, employee engagement, payroll, learning management. Examples: Workday, Greenhouse, Lever, Rippling (HR), Lattice, 15Five.
+Infrastructure: Cloud infrastructure, container orchestration, networking, security, storage. Examples: AWS, GCP, Azure, Cloudflare, HashiCorp, Palo Alto Networks.
+AI/ML: Machine learning platforms, LLM providers, AI-native tools, MLOps, data science platforms. Examples: OpenAI, Anthropic, Cohere, Scale AI, Weights & Biases, Hugging Face.
+E-commerce: Online retail platforms, marketplace software, commerce tooling. Examples: Shopify, BigCommerce, Magento, Faire.
+Communication: Team messaging, VoIP, video conferencing, email platforms, collaboration. Examples: Slack, Zoom, Microsoft Teams, Loom, Notion.
+Marketing/Analytics: CRM, marketing automation, customer data, advertising tech, web analytics. Examples: Salesforce, HubSpot, Marketo, Segment, Amplitude, Mixpanel.
+Other: Any company that does not clearly fit the above categories (healthcare, legal, real estate, manufacturing, education, logistics, etc).
 `
 
 interface ClassifyRequest {
@@ -76,7 +77,9 @@ NO markdown, NO code blocks, NO explanations.`
 }
 
 async function main() {
-  console.log('Fetching all companies...')
+  console.log('Resetting all specializations to null...')
+  await db.update(atsCompanies).set({ specialization: null })
+  console.log('Reset complete. Fetching all companies...')
   const allCompanies = await db.select().from(atsCompanies)
   console.log(`Found ${allCompanies.length} companies`)
 
@@ -86,7 +89,7 @@ async function main() {
 
   for (let i = 0; i < allCompanies.length; i += BATCH_SIZE) {
     const batch = allCompanies.slice(i, i + BATCH_SIZE)
-    const unclassified = batch.filter((c) => !c.specialization || c.specialization === 'Other')
+    const unclassified = batch.filter((c) => !c.specialization)
 
     if (unclassified.length === 0) {
       skipped += batch.length

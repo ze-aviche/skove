@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { db } from '../db/index.js'
-import { atsJobs, atsCompanies, agentResults, users } from '../db/schema.js'
+import { atsJobs, agentResults, users } from '../db/schema.js'
 import { and, or, desc, eq, sql } from 'drizzle-orm'
 import { requireAuth } from '../lib/auth.js'
 import { log } from '../lib/logger.js'
@@ -27,7 +27,7 @@ function buildLocationPattern(loc: string): string {
   return `%${city}%`
 }
 
-// GET /api/jobs/search — query ats_jobs with optional specialization filter
+// GET /api/jobs/search — query ats_jobs with optional filters
 // Query params: title, company, location, specialization, page (default 1), limit (default 25, max 50)
 jobsRouter.get('/search', requireAuth, async (req, res) => {
   try {
@@ -39,11 +39,10 @@ jobsRouter.get('/search', requireAuth, async (req, res) => {
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 25))
     const offset = (page - 1) * limit
 
-    // Build conditions in selectivity order: location → company → title
-    // (specialization is handled via JOIN below, applied before these)
+    // Build conditions in selectivity order: location → specialization → company → title
     const conditions = []
 
-    // 1. Location — most selective (only 4 countries + remote)
+    // 1. Location — most selective
     if (location) {
       const locations = location.split(',').map(l => l.trim()).filter(Boolean)
       if (locations.length > 0) {
@@ -52,7 +51,22 @@ jobsRouter.get('/search', requireAuth, async (req, res) => {
       }
     }
 
-    // 2. Company — more selective than title
+    // 2. Specialization — EXISTS with DISTINCT ON to avoid duplicate ats_companies rows
+    // (ats_companies can have multiple rows for the same company name from different ATS sources)
+    if (specialization) {
+      conditions.push(sql`EXISTS (
+        SELECT 1 FROM (
+          SELECT DISTINCT ON (lower(name)) name, specialization
+          FROM ats_companies
+          WHERE specialization IS NOT NULL
+          ORDER BY lower(name), specialization
+        ) uc
+        WHERE lower(uc.name) = lower(${atsJobs.company})
+        AND lower(uc.specialization) = lower(${specialization})
+      )`)
+    }
+
+    // 3. Company LIKE
     if (company) {
       const companies = company.split(',').map(c => c.trim()).filter(Boolean)
       if (companies.length > 0) {
@@ -61,7 +75,7 @@ jobsRouter.get('/search', requireAuth, async (req, res) => {
       }
     }
 
-    // 3. Title — least selective (broadest match)
+    // 4. Title LIKE — least selective
     if (title) {
       const titles = title.split(',').map(t => t.trim()).filter(Boolean)
       if (titles.length > 0) {
@@ -72,31 +86,6 @@ jobsRouter.get('/search', requireAuth, async (req, res) => {
 
     const where = conditions.length > 0 ? and(...conditions) : undefined
 
-    // 4. Specialization — via INNER JOIN (applied first by Postgres as most selective)
-    if (specialization) {
-      const joinCondition = sql`lower(${atsJobs.company}) = lower(${atsCompanies.name})`
-      const specializationCondition = sql`lower(${atsCompanies.specialization}) = lower(${specialization})`
-      const specWhere = and(specializationCondition, where)
-
-      const [{ total }] = await db
-        .select({ total: sql<string>`count(*)` })
-        .from(atsJobs)
-        .innerJoin(atsCompanies, joinCondition)
-        .where(specWhere)
-
-      const jobs = await db
-        .select({ job: atsJobs })
-        .from(atsJobs)
-        .innerJoin(atsCompanies, joinCondition)
-        .where(specWhere)
-        .orderBy(desc(atsJobs.createdAt))
-        .limit(limit)
-        .offset(offset)
-
-      return res.json({ jobs: jobs.map(r => r.job), total: Number(total), page, limit })
-    }
-
-    // Standard query without specialization
     const [{ total }] = await db
       .select({ total: sql<string>`count(*)` })
       .from(atsJobs)
