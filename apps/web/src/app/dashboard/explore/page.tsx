@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
-import { searchJobs, saveAndScoreJob, downloadDocument, AtsJob, AgentResult } from '@/lib/api'
+import { searchJobs, saveAndScoreJob, downloadDocument, toggleFavourite, AtsJob, AgentResult } from '@/lib/api'
 import JobTitlePicker from '@/components/JobTitlePicker'
 import CompanyPicker from '@/components/CompanyPicker'
 import LocationTagsPicker from '@/components/LocationTagsPicker'
@@ -116,6 +116,17 @@ export default function ExplorePage() {
     } catch (err) {
       setJobs(prev => prev.map(j => j.atsJob.id === jobId ? { ...j, scoring: false } : j))
       showToast({ message: err instanceof Error ? err.message : 'Scoring failed', variant: 'error' })
+    }
+  }
+
+  const handleToggleFavourite = async (resultId: string) => {
+    try {
+      const token = await getToken()
+      const updated = await toggleFavourite(resultId, token)
+      setJobs(prev => prev.map(j => j.result?.id === resultId ? { ...j, result: updated } : j))
+      showToast({ message: updated.isFavourite ? 'Saved to favourites' : 'Removed from favourites', variant: 'success' })
+    } catch {
+      showToast({ message: 'Failed to update favourite', variant: 'error' })
     }
   }
 
@@ -321,6 +332,20 @@ export default function ExplorePage() {
 
                       {/* Actions */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                        {result && (
+                          <button
+                            onClick={() => handleToggleFavourite(result.id)}
+                            title={result.isFavourite ? 'Remove from saved' : 'Save job'}
+                            style={{
+                              fontSize: 15, lineHeight: 1,
+                              padding: '5px 8px', borderRadius: 7,
+                              border: `1px solid ${result.isFavourite ? 'rgba(245,158,11,0.35)' : 'var(--border)'}`,
+                              background: result.isFavourite ? 'rgba(245,158,11,0.1)' : 'transparent',
+                              color: result.isFavourite ? '#f59e0b' : 'var(--text-tertiary)',
+                              cursor: 'pointer',
+                            }}
+                          >{result.isFavourite ? '★' : '☆'}</button>
+                        )}
                         <a
                           href={job.applyUrl}
                           target="_blank"

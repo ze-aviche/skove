@@ -5,6 +5,16 @@ import Link from 'next/link'
 import { useAuth } from '@clerk/nextjs'
 import { getAgentDefinitions, getMyAgents, getResults, AgentDefinition, AgentInstance, AgentResult } from '@/lib/api'
 
+function postedLabel(iso: string): string {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+  if (isNaN(days) || days < 0) return 'Recently'
+  if (days === 0) return 'Today'
+  if (days === 1) return '1d ago'
+  if (days < 7) return `${days}d ago`
+  if (days < 30) return `${Math.floor(days / 7)}w ago`
+  return `${Math.floor(days / 30)}mo ago`
+}
+
 const iconMap: Record<string, string> = {
   'flight-watcher': '✈️',
   'job-application-tracker': '💼',
@@ -317,6 +327,83 @@ export default function DashboardPage() {
               </Link>
             </div>
           </div>
+
+          {/* Saved Jobs */}
+          {(() => {
+            const savedJobs = results.filter(r => r.isFavourite && (r.metadata as any)?.atsJobId)
+            if (savedJobs.length === 0) return null
+            return (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <h2 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
+                    Saved jobs <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>({savedJobs.length})</span>
+                  </h2>
+                  <Link href="/dashboard/explore" style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none' }}>Browse more →</Link>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 10 }}>
+                  {savedJobs.map(r => {
+                    const meta = (r.metadata ?? {}) as Record<string, any>
+                    const matchScore = meta.matchScore != null ? Number(meta.matchScore) : null
+                    return (
+                      <div key={r.id} style={{
+                        background: 'var(--surface-2)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 12,
+                        padding: '12px 14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 6,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                          <div style={{
+                            width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                            background: 'var(--surface-3)', border: '1px solid var(--border)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 11, fontWeight: 700, color: 'var(--brand)',
+                          }}>
+                            {(meta.company ?? '?').slice(0, 2).toUpperCase()}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {meta.jobTitle ?? r.title}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                              <span style={{ fontWeight: 500 }}>{meta.company}</span>
+                              {meta.location && <><span style={{ color: 'var(--text-tertiary)' }}>·</span><span>{meta.location}</span></>}
+                            </div>
+                          </div>
+                          {matchScore !== null && !isNaN(matchScore) && (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, flexShrink: 0,
+                              padding: '2px 7px', borderRadius: 99,
+                              background: matchScore >= 8 ? 'var(--success-dim)' : 'var(--brand-dim)',
+                              color: matchScore >= 8 ? 'var(--success)' : 'var(--brand)',
+                              border: `1px solid ${matchScore >= 8 ? 'rgba(16,185,129,0.2)' : 'rgba(59,130,246,0.2)'}`,
+                            }}>{matchScore}/10</span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                            {meta.postedAt ? postedLabel(meta.postedAt) : postedLabel(r.createdAt)} · ★ saved
+                          </span>
+                          {r.url && (
+                            <a href={r.url} target="_blank" rel="noreferrer" style={{
+                              fontSize: 11, fontWeight: 500,
+                              padding: '3px 10px', borderRadius: 6,
+                              border: '1px solid var(--border)',
+                              background: 'var(--surface-3)',
+                              color: 'var(--text-secondary)',
+                              textDecoration: 'none',
+                            }}>Apply →</a>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
         </>
       )}
     </div>
