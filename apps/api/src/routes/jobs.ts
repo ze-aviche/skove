@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { db } from '../db/index.js'
 import { atsJobs, atsCompanies, agentResults, users } from '../db/schema.js'
-import { and, or, desc, eq, sql, ilike } from 'drizzle-orm'
+import { and, or, desc, eq, sql } from 'drizzle-orm'
 import { requireAuth } from '../lib/auth.js'
 import { log } from '../lib/logger.js'
 import { scoreJobMatch, tailorResume } from '../lib/claude.js'
@@ -39,39 +39,34 @@ jobsRouter.get('/search', requireAuth, async (req, res) => {
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 25))
     const offset = (page - 1) * limit
 
-    const conditions: ReturnType<typeof sql>[] = []
+    const conditions = []
 
     // Handle multiple comma-separated values with OR logic
     if (title) {
       const titles = title.split(',').map(t => t.trim()).filter(Boolean)
       if (titles.length > 0) {
-        const titleConditions = titles.map(t => sql`${atsJobs.titleSearch} like ${'%' + normalizeText(t) + '%'}`)
-        conditions.push(titleConditions.length === 1 ? titleConditions[0] : sql`(${or(...titleConditions)})`
-        )
+        const titleConds = titles.map(t => sql`${atsJobs.titleSearch} like ${'%' + normalizeText(t) + '%'}`)
+        conditions.push(titles.length === 1 ? titleConds[0] : or(...titleConds))
       }
     }
 
     if (company) {
       const companies = company.split(',').map(c => c.trim()).filter(Boolean)
       if (companies.length > 0) {
-        const companyConditions = companies.map(c => sql`${atsJobs.companySearch} like ${'%' + normalizeText(c) + '%'}`)
-        conditions.push(companyConditions.length === 1 ? companyConditions[0] : sql`(${or(...companyConditions)})`
-        )
+        const companyConds = companies.map(c => sql`${atsJobs.companySearch} like ${'%' + normalizeText(c) + '%'}`)
+        conditions.push(companies.length === 1 ? companyConds[0] : or(...companyConds))
       }
     }
 
     if (location) {
       const locations = location.split(',').map(l => l.trim()).filter(Boolean)
       if (locations.length > 0) {
-        const locationConditions = locations.map(l => sql`${atsJobs.locationSearch} like ${buildLocationPattern(l)}`)
-        conditions.push(locationConditions.length === 1 ? locationConditions[0] : sql`(${or(...locationConditions)})`
-        )
+        const locationConds = locations.map(l => sql`${atsJobs.locationSearch} like ${buildLocationPattern(l)}`)
+        conditions.push(locations.length === 1 ? locationConds[0] : or(...locationConds))
       }
     }
 
     const where = conditions.length > 0 ? and(...conditions) : undefined
-
-    let query = db.select().from(atsJobs).where(where)
 
     // If specialization filter, join with ats_companies using case-insensitive name match
     if (specialization) {

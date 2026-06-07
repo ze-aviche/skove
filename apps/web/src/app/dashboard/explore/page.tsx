@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
 import { searchJobs, saveAndScoreJob, downloadDocument, AtsJob, AgentResult } from '@/lib/api'
@@ -49,6 +49,11 @@ export default function ExplorePage() {
   const [specializationQ, setSpecializationQ] = useState('')
   const [token, setToken] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(false)
+
+  // Load token on mount so pickers work before first search
+  useEffect(() => {
+    getToken().then(t => setToken(t ?? undefined)).catch(() => {})
+  }, [])
 
   // Specializations dropdown
   const specializations = ['AI/ML', 'CCaaS', 'Communication', 'Database', 'DevTools', 'E-commerce', 'FinTech', 'HR Tech', 'Infrastructure', 'Marketing/Analytics', 'Other']
