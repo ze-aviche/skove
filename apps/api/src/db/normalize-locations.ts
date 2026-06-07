@@ -3,6 +3,7 @@ config({ path: '.env.local' })
 
 import { db } from './index.js'
 import { atsJobs } from './schema.js'
+import { eq } from 'drizzle-orm'
 
 // Map location text to country code
 function extractCountry(location: string): string | null {
@@ -69,7 +70,7 @@ async function main() {
           location: country,
           locationSearch: country.toLowerCase(),
         })
-        .where(atsJobs.id == job.id)
+        .where(eq(atsJobs.id, job.id))
 
       updated++
       if (updated % 1000 === 0) {

@@ -3,6 +3,7 @@ config({ path: '.env.local' })
 
 import { db } from './index.js'
 import { atsJobs } from './schema.js'
+import { eq } from 'drizzle-orm'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
@@ -67,7 +68,7 @@ async function main() {
         location: enrichedLocation,
         locationSearch: normalizeText(enrichedLocation),
       })
-      .where(atsJobs.id == job.id)
+      .where(eq(atsJobs.id, job.id))
 
     updated++
     if (updated % 100 === 0) {
