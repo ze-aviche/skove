@@ -116,6 +116,24 @@ resultsRouter.post('/:id/score', requireAuth, async (req, res) => {
   }
 })
 
+// PATCH /api/results/:id/favourite — toggle favourite flag
+resultsRouter.patch('/:id/favourite', requireAuth, async (req, res) => {
+  try {
+    const [result] = await db.select().from(agentResults).where(eq(agentResults.id, req.params.id))
+    if (!result || result.userId !== req.userId) {
+      return res.status(404).json({ error: 'Result not found' })
+    }
+    const [updated] = await db.update(agentResults)
+      .set({ isFavourite: !result.isFavourite })
+      .where(eq(agentResults.id, req.params.id))
+      .returning()
+    res.json(updated)
+  } catch (err) {
+    log.error('api', 'PATCH /api/results/:id/favourite failed', err, { resultId: req.params.id, userId: req.userId })
+    res.status(500).json({ error: 'Failed to update favourite' })
+  }
+})
+
 // PATCH /api/results/:id/read — mark result as read
 resultsRouter.patch('/:id/read', requireAuth, async (req, res) => {
   try {

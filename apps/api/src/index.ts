@@ -11,6 +11,7 @@ import { resumeRouter } from './routes/resume.js'
 import { billingRouter } from './routes/billing.js'
 import { adminRouter } from './routes/admin.js'
 import { downloadRouter } from './routes/download.js'
+import { jobsRouter } from './routes/jobs.js'
 import { startScheduler } from './runner/scheduler.js'
 import { log } from './lib/logger.js'
 
@@ -41,6 +42,7 @@ app.use('/api/resume', resumeRouter)
 app.use('/api/billing', billingRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/download', downloadRouter)
+app.use('/api/jobs', jobsRouter)
 
 app.listen(PORT, () => {
   log.info('api', 'server started', { port: PORT })

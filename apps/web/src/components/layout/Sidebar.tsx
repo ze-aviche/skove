@@ -10,6 +10,7 @@ const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: '▦' },
   { label: 'My agents', href: '/dashboard/agents', icon: '⬡' },
   { label: 'Results', href: '/dashboard/results', icon: '◈' },
+  { label: 'Job Explorer', href: '/dashboard/explore', icon: '⊛' },
   { label: 'Agent store', href: '/dashboard/store', icon: '⊞' },
   { label: 'Profile', href: '/dashboard/profile', icon: '◉' },
 ]

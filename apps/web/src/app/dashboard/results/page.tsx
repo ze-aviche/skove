@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
-import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, scoreResult, AgentResult } from '@/lib/api'
+import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, scoreResult, toggleFavourite, AgentResult } from '@/lib/api'
 
-type Tab = 'All' | 'Unread' | 'Flights' | 'Jobs' | 'Rentals' | 'Stocks' | 'News'
-const TABS: Tab[] = ['All', 'Unread', 'Flights', 'Jobs', 'Rentals', 'Stocks', 'News']
+type Tab = 'All' | 'Unread' | 'Saved' | 'Flights' | 'Jobs' | 'Rentals' | 'Stocks' | 'News'
+const TABS: Tab[] = ['All', 'Unread', 'Saved', 'Flights', 'Jobs', 'Rentals', 'Stocks', 'News']
 
 function agentType(r: AgentResult): string {
   return typeof r.metadata === 'object' && r.metadata !== null && 'agentType' in r.metadata
@@ -42,6 +42,7 @@ function bodyForResult(r: AgentResult): string {
 function matchesTab(r: AgentResult, tab: Tab): boolean {
   if (tab === 'All') return true
   if (tab === 'Unread') return !r.isRead
+  if (tab === 'Saved') return r.isFavourite
   const t = agentType(r)
   if (tab === 'Flights') return t.includes('flight')
   if (tab === 'Jobs') return t.includes('job')
@@ -189,6 +190,17 @@ export default function ResultsPage() {
       showToast({ message: err instanceof Error ? err.message : 'Scoring failed', variant: 'error' })
     } finally {
       setScoringIds(prev => { const s = new Set(prev); s.delete(r.id); return s })
+    }
+  }
+
+  const handleFavourite = async (r: AgentResult) => {
+    try {
+      const token = await auth.getToken()
+      const updated = await toggleFavourite(r.id, token)
+      setResults(prev => prev.map(x => x.id === updated.id ? updated : x))
+      showToast({ message: updated.isFavourite ? 'Added to saved' : 'Removed from saved', variant: 'success' })
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'Failed to update', variant: 'error' })
     }
   }
 
@@ -481,6 +493,17 @@ export default function ResultsPage() {
                           cursor: 'pointer',
                         }}>Mark read</button>
                       )}
+                      <button
+                        onClick={() => handleFavourite(r)}
+                        title={r.isFavourite ? 'Remove from saved' : 'Save'}
+                        style={{
+                          fontSize: 16, lineHeight: 1,
+                          padding: '4px 8px', borderRadius: 7,
+                          border: `1px solid ${r.isFavourite ? 'rgba(245,158,11,0.35)' : 'var(--border)'}`,
+                          background: r.isFavourite ? 'rgba(245,158,11,0.1)' : 'transparent',
+                          color: r.isFavourite ? '#f59e0b' : 'var(--text-tertiary)',
+                          cursor: 'pointer',
+                        }}>{r.isFavourite ? '★' : '☆'}</button>
                       <button
                         onClick={() => handleDeleteOne(r.id)}
                         title="Delete result"

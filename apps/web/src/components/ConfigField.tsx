@@ -3,6 +3,7 @@
 import AirportPicker from './AirportPicker'
 import CityPicker from './CityPicker'
 import DatePicker from './DatePicker'
+import LocationTagsPicker from './LocationTagsPicker'
 import { AgentConfigField } from '@/lib/api'
 
 const inputStyle = {
@@ -66,6 +67,16 @@ export default function ConfigField({ fieldKey, field, value, onChange }: Props)
   if (field.type === 'city') {
     return (
       <CityPicker
+        value={String(value ?? '')}
+        onChange={(v) => onChange(fieldKey, v)}
+        placeholder={field.placeholder}
+      />
+    )
+  }
+
+  if (field.type === 'location-tags') {
+    return (
+      <LocationTagsPicker
         value={String(value ?? '')}
         onChange={(v) => onChange(fieldKey, v)}
         placeholder={field.placeholder}

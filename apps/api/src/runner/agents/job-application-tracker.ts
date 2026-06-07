@@ -2,7 +2,7 @@ import { AgentRunResult } from './flight-watcher.js'
 import { RunnerContext } from './index.js'
 import { db } from '../../db/index.js'
 import { atsJobs, agentResults } from '../../db/schema.js'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, or, sql } from 'drizzle-orm'
 import { log } from '../../lib/logger.js'
 
 interface JobTrackerConfig {
@@ -46,21 +46,35 @@ function postedLabel(iso: string): string {
   return `${Math.floor(days / 7)} weeks ago`
 }
 
-async function fetchStoredATSJobs(queryText: string, location: string, minSalary: number): Promise<NormalisedJob[]> {
-  const searchText = `%${normalizeText(queryText)}%`
-  const locationText = `%${normalizeText(location)}%`
+function locationToLikePattern(loc: string): string {
+  const normalized = normalizeText(loc)
+  // Normalize all remote variants: "Remote", "USA-Remote", "US-Remote", "remote-us", etc.
+  if (normalized.includes('remote') || normalized.includes('wfh') || normalized === 'work from home') {
+    return '%remote%'
+  }
+  // Use city name only (before the comma) for broader matching
+  const city = normalized.split(',')[0].trim()
+  return `%${city}%`
+}
 
-  log.info('job-tracker', 'db query', { titleSearch: searchText, locationSearch: locationText, minSalary })
+async function fetchStoredATSJobs(queryText: string, locations: string[], minSalary: number): Promise<NormalisedJob[]> {
+  const searchText = `%${normalizeText(queryText)}%`
+  const effectiveLocations = locations.length > 0 ? locations : ['remote']
+
+  // Build OR clause: each location becomes a LIKE pattern against locationSearch
+  const locationClauses = effectiveLocations.map((loc) =>
+    sql`${atsJobs.locationSearch} like ${locationToLikePattern(loc)}`,
+  )
+  const locationCondition = locationClauses.length === 1
+    ? locationClauses[0]
+    : or(...locationClauses)
+
+  log.info('job-tracker', 'db query', { titleSearch: searchText, locations: effectiveLocations, minSalary })
 
   const rows = await db
     .select()
     .from(atsJobs)
-    .where(
-      and(
-        sql`${atsJobs.titleSearch} like ${searchText}`,
-        sql`${atsJobs.locationSearch} like ${locationText}`,
-      ),
-    )
+    .where(and(sql`${atsJobs.titleSearch} like ${searchText}`, locationCondition))
     .orderBy(desc(atsJobs.createdAt))
     .limit(100)
 
@@ -217,40 +231,38 @@ export async function runJobApplicationTracker(
 ): Promise<AgentRunResult[]> {
   const c = config as JobTrackerConfig
   const jobTitle = String(c.jobTitle || 'Software Engineer')
-  const location = String(c.location || 'Remote')
+  // location is stored as comma-separated tags: "Remote, Dallas, TX"
+  const locations = String(c.location || 'Remote').split(',').map((s) => s.trim()).filter(Boolean)
   const minSalary = Number(c.minSalary) || 0
   const keywords = c.keywords ? String(c.keywords) : ''
-  const atsFirstOnly = Boolean(c.atsFirstOnly)
-  const isRemote = location.toLowerCase().includes('remote')
+  const isRemote = locations.some((l) => l.toLowerCase().includes('remote'))
+  // For fallback external APIs, pass the first non-remote location (or "remote")
+  const primaryLocation = locations.find((l) => !l.toLowerCase().includes('remote')) ?? 'remote'
   const what = [jobTitle, keywords].filter(Boolean).join(' ')
-  const where = isRemote ? 'remote' : location
+  const where = isRemote ? 'remote' : primaryLocation
 
-  log.info('job-tracker', 'run started', { userId: ctx.userId, jobTitle, location, minSalary, keywords, atsFirstOnly })
+  log.info('job-tracker', 'run started', { userId: ctx.userId, jobTitle, locations, minSalary, keywords })
 
-  let jobs = await fetchStoredATSJobs(what, where, minSalary)
+  let jobs = await fetchStoredATSJobs(what, locations, minSalary)
   let jobSource = 'ats_db'
 
-  if (!atsFirstOnly) {
-    if (jobs.length === 0) {
-      log.info('job-tracker', 'db empty, trying adzuna', { what, where })
-      jobs = await fetchAdzuna(what, where, minSalary)
-      jobSource = 'adzuna'
-      log.info('job-tracker', 'adzuna fetch complete', { count: jobs.length })
-    }
-    if (jobs.length === 0) {
-      log.info('job-tracker', 'adzuna empty, trying jsearch', { query: `${jobTitle} ${isRemote ? 'remote' : location}` })
-      jobs = await fetchJSearch(`${jobTitle} ${isRemote ? 'remote' : location}`)
-      jobSource = 'jsearch'
-      log.info('job-tracker', 'jsearch fetch complete', { count: jobs.length })
-    }
-    if (jobs.length === 0 && isRemote) {
-      log.info('job-tracker', 'jsearch empty, trying remoteok', { jobTitle })
-      jobs = await fetchRemoteOK(jobTitle)
-      jobSource = 'remoteok'
-      log.info('job-tracker', 'remoteok fetch complete', { count: jobs.length })
-    }
-  } else if (jobs.length === 0) {
-    log.info('job-tracker', 'ats-first-only mode: db empty, no fallback', { userId: ctx.userId })
+  if (jobs.length === 0) {
+    log.info('job-tracker', 'db empty, trying adzuna', { what, where })
+    jobs = await fetchAdzuna(what, where, minSalary)
+    jobSource = 'adzuna'
+    log.info('job-tracker', 'adzuna fetch complete', { count: jobs.length })
+  }
+  if (jobs.length === 0) {
+    log.info('job-tracker', 'adzuna empty, trying jsearch', { query: `${jobTitle} ${where}` })
+    jobs = await fetchJSearch(`${jobTitle} ${where}`)
+    jobSource = 'jsearch'
+    log.info('job-tracker', 'jsearch fetch complete', { count: jobs.length })
+  }
+  if (jobs.length === 0 && isRemote) {
+    log.info('job-tracker', 'jsearch empty, trying remoteok', { jobTitle })
+    jobs = await fetchRemoteOK(jobTitle)
+    jobSource = 'remoteok'
+    log.info('job-tracker', 'remoteok fetch complete', { count: jobs.length })
   }
 
   log.info('job-tracker', 'jobs candidate pool ready', { count: jobs.length, source: jobSource, userId: ctx.userId })

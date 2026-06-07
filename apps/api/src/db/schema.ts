@@ -36,16 +36,17 @@ export const agentInstances = pgTable('agent_instances', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
-// Results produced by agent runs
+// Results produced by agent runs (instanceId nullable for manually-saved explorer results)
 export const agentResults = pgTable('agent_results', {
   id: uuid('id').primaryKey().defaultRandom(),
-  instanceId: uuid('instance_id').notNull().references(() => agentInstances.id),
+  instanceId: uuid('instance_id').references(() => agentInstances.id),
   userId: text('user_id').notNull().references(() => users.id),
   title: text('title').notNull(),
   value: text('value'), // e.g. "$241"
   url: text('url'),
   metadata: jsonb('metadata'), // any extra data the agent wants to store
   isRead: boolean('is_read').default(false).notNull(),
+  isFavourite: boolean('is_favourite').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 

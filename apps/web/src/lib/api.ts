@@ -23,7 +23,7 @@ async function fetchJson<T>(path: string, options: RequestInit = {}): Promise<T>
 }
 
 export type AgentConfigField = {
-  type: 'string' | 'number' | 'select' | 'boolean' | 'date' | 'airport' | 'city'
+  type: 'string' | 'number' | 'select' | 'boolean' | 'date' | 'airport' | 'city' | 'location-tags'
   label: string
   required?: boolean
   placeholder?: string
@@ -55,13 +55,29 @@ export type AgentInstance = {
 
 export type AgentResult = {
   id: string
-  instanceId: string
+  instanceId: string | null
   userId: string
   title: string
   value?: string
   url?: string
   metadata?: Record<string, unknown>
   isRead: boolean
+  isFavourite: boolean
+  createdAt: string
+}
+
+export type AtsJob = {
+  id: string
+  source: string
+  externalId?: string
+  applyUrl: string
+  title: string
+  company: string
+  location: string
+  salaryMin?: number
+  salaryMax?: number
+  description?: string
+  postedAt: string
   createdAt: string
 }
 
@@ -224,6 +240,36 @@ export async function downloadDocument(
 
 export function scoreResult(resultId: string, token?: string): Promise<{ already: boolean; metadata: Record<string, unknown> }> {
   return fetchJson(`/api/results/${resultId}/score`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
+export function toggleFavourite(resultId: string, token?: string): Promise<AgentResult> {
+  return fetchJson<AgentResult>(`/api/results/${resultId}/favourite`, {
+    method: 'PATCH',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
+export function searchJobs(
+  params: { title?: string; company?: string; location?: string; page?: number; limit?: number },
+  token?: string,
+): Promise<{ jobs: AtsJob[]; total: number; page: number; limit: number }> {
+  const qs = new URLSearchParams()
+  if (params.title)    qs.set('title',    params.title)
+  if (params.company)  qs.set('company',  params.company)
+  if (params.location) qs.set('location', params.location)
+  if (params.page)     qs.set('page',     String(params.page))
+  if (params.limit)    qs.set('limit',    String(params.limit))
+  return fetchJson(`/api/jobs/search?${qs}`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
+}
+
+export function saveAndScoreJob(
+  atsJobId: string,
+  token?: string,
+): Promise<{ result: AgentResult; created: boolean; alreadyScored: boolean }> {
+  return fetchJson(`/api/jobs/${atsJobId}/save-and-score`, {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
