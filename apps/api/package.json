@@ -11,6 +11,7 @@
     "db:migrate": "drizzle-kit push:pg --config ./drizzle.config.ts",
     "db:seed": "tsx src/db/seed.ts",
     "db:seed-ats-companies": "tsx src/db/seed-ats-companies.ts",
+    "db:seed-ccaas": "tsx src/db/seed-ccaas-companies.ts",
     "db:studio": "drizzle-kit studio --config ./drizzle.config.ts"
   },
   "dependencies": {

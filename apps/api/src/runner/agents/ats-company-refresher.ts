@@ -31,6 +31,7 @@ function inferAtsTypeFromUrl(careersUrl: string | null | undefined, currentType:
   if (url.includes('greenhouse.io')) return 'greenhouse'
   if (url.includes('lever.co')) return 'lever'
   if (url.includes('ashbyhq.com') || url.includes('boards.ashby.io')) return 'ashby'
+  if (url.includes('myworkdayjobs.com')) return 'workday'
   return currentType
 }
 
@@ -180,6 +181,92 @@ async function fetchAshbyCompanyJobs(company: {
   }
 }
 
+async function fetchWorkdayCompanyJobs(company: {
+  name: string
+  atsIdentifier: string
+  careersUrl: string | null
+}): Promise<NormalisedJob[]> {
+  if (!company.careersUrl) {
+    log.warn('ats-refresher', 'workday: no careersUrl', { company: company.name })
+    return []
+  }
+
+  // Derive the CXS (Content Experience Service) search endpoint from the human-readable careers URL.
+  // Input:  https://{tenant}.{instance}.myworkdayjobs.com/en-US/{board}
+  // Output: https://{tenant}.{instance}.myworkdayjobs.com/wday/cxs/{tenant}/{board}/jobs
+  let tenant: string
+  let baseUrl: string
+  let board: string
+  try {
+    const parsed = new URL(company.careersUrl)
+    const hostParts = parsed.hostname.split('.')
+    tenant = hostParts[0]
+    baseUrl = `https://${parsed.hostname}`
+    const pathParts = parsed.pathname.split('/').filter(Boolean)
+    // pathname is /en-US/{board} or just /{board}
+    board = pathParts[pathParts.length - 1]
+  } catch {
+    log.warn('ats-refresher', 'workday: could not parse careersUrl', { company: company.name, url: company.careersUrl })
+    return []
+  }
+
+  const cxsUrl = `${baseUrl}/wday/cxs/${tenant}/${board}/jobs`
+  const PAGE_SIZE = 20
+  const MAX_JOBS = 200
+  const jobs: NormalisedJob[] = []
+  let offset = 0
+  let total = Infinity
+
+  log.info('ats-refresher', 'workday: fetching', { company: company.name, cxsUrl })
+
+  while (offset < total && jobs.length < MAX_JOBS) {
+    try {
+      const res = await fetch(cxsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'skove-agent/1.0',
+        },
+        body: JSON.stringify({ appliedFacets: {}, limit: PAGE_SIZE, offset, searchText: '' }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      })
+
+      if (!res.ok) {
+        log.warn('ats-refresher', 'workday: fetch failed', { company: company.name, status: res.status, offset })
+        break
+      }
+
+      const data = await res.json() as { total?: number; jobPostings?: Array<Record<string, any>> }
+      total = data.total ?? 0
+
+      const postings = data.jobPostings ?? []
+      for (const job of postings) {
+        if (!job.title || !job.externalPath) continue
+        const applyUrl = `${baseUrl}/en-US/${board}${job.externalPath}`
+        const stableId = job.externalPath.replace(/\//g, '-').replace(/^-/, '')
+        jobs.push({
+          id: `workday-${tenant}-${stableId}`,
+          title: job.title,
+          company: company.name,
+          location: job.locationsText ?? 'Unknown',
+          applyUrl,
+          postedAt: new Date().toISOString(),
+          source: 'Workday',
+        })
+      }
+
+      offset += PAGE_SIZE
+      if (postings.length < PAGE_SIZE) break
+    } catch (err) {
+      log.warn('ats-refresher', 'workday: network error', { company: company.name, err: (err as Error).message })
+      break
+    }
+  }
+
+  log.info('ats-refresher', 'workday: done', { company: company.name, jobs: jobs.length, total })
+  return jobs
+}
+
 async function fetchCompanyJobs(company: {
   id: string
   name: string
@@ -198,6 +285,7 @@ async function fetchCompanyJobs(company: {
   if (resolvedType === 'lever') return fetchLeverCompanyJobs(company)
   if (resolvedType === 'greenhouse') return fetchGreenhouseCompanyJobs(company)
   if (resolvedType === 'ashby') return fetchAshbyCompanyJobs(company)
+  if (resolvedType === 'workday') return fetchWorkdayCompanyJobs(company)
   log.warn('ats-refresher', 'unsupported ats type, skipping', { company: company.name, atsType: resolvedType })
   return []
 }
