@@ -2,6 +2,7 @@ import { db } from '../../db/index.js'
 import { atsCompanies, atsJobs } from '../../db/schema.js'
 import { eq, lt, sql } from 'drizzle-orm'
 import { log } from '../../lib/logger.js'
+import { extractLocationSearch } from '../../lib/location.js'
 
 const BATCH_SIZE = 200
 const CONCURRENCY_PER_PROVIDER = 5 // max simultaneous requests to any single ATS provider
@@ -346,7 +347,7 @@ async function persistJobs(jobs: NormalisedJob[]): Promise<void> {
       metadata: { source: job.source },
       titleSearch: normalizeText(job.title),
       companySearch: normalizeText(job.company),
-      locationSearch: normalizeText(enrichedLocation),
+      locationSearch: extractLocationSearch(enrichedLocation),
       createdAt: now,
     }
   })
