@@ -87,6 +87,7 @@ export default function AgentsPage() {
   const [cloneConfig, setCloneConfig] = useState<Record<string, unknown>>({})
   const [cloneErrors, setCloneErrors] = useState<string[]>([])
   const [cloneLoading, setCloneLoading] = useState(false)
+  const [authToken, setAuthToken] = useState<string | undefined>(undefined)
   const [hasResume, setHasResume] = useState(false)
   const [resumeWordCount, setResumeWordCount] = useState(0)
   const [resumeUploading, setResumeUploading] = useState(false)
@@ -98,6 +99,7 @@ export default function AgentsPage() {
     async function load() {
       try {
         const token = await auth.getToken()
+        setAuthToken(token ?? undefined)
         const [instances, defs, resumeStatus] = await Promise.all([
           getMyAgents(token),
           getAgentDefinitions(token),
@@ -498,7 +500,7 @@ export default function AgentsPage() {
                       <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
                         {field.label}{field.required ? ' *' : ''}
                       </span>
-                      <ConfigField fieldKey={key} field={field} value={cloneConfig[key]} onChange={handleCloneChange} />
+                      <ConfigField fieldKey={key} field={field} value={cloneConfig[key]} onChange={handleCloneChange} token={authToken} />
                     </label>
                   ))}
               </div>
@@ -611,6 +613,7 @@ export default function AgentsPage() {
                         field={field}
                         value={editConfig[key]}
                         onChange={handleEditChange}
+                        token={authToken}
                       />
                     </label>
                   ))}

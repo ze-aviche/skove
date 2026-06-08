@@ -27,10 +27,10 @@ const builtInAgents = [
     name: 'Job application tracker',
     description: 'Watches new job listings and prioritizes ATS feeds first, with broad search APIs as fallback.',
     configSchema: {
-      jobTitle: { type: 'string', label: 'Job title', required: true, placeholder: 'e.g. Contact Center Engineer, CCaaS Developer' },
+      jobTitle: { type: 'job-title-tags', label: 'Job titles', required: true, placeholder: 'Software Engineer, Data Scientist…' },
       location: { type: 'location-tags', label: 'Locations', required: true, placeholder: 'Remote, Dallas, TX…' },
-      minSalary: { type: 'number', label: 'Minimum salary ($)', required: false, placeholder: '120000' },
-      keywords: { type: 'string', label: 'Keywords (title search)', required: false, placeholder: 'e.g. Genesys, CCaaS, Twilio, contact center' },
+      keywords: { type: 'string', label: 'Keywords', required: false, placeholder: 'e.g. Genesys, CCaaS, Twilio, contact center' },
+      specialization: { type: 'specialization-tags', label: 'Specializations', required: false, placeholder: '' },
       matchThreshold: { type: 'number', label: 'Min AI match score (1–10)', required: false, placeholder: '7' },
       frequency: { type: 'select', label: 'Check frequency', required: false, options: ['Every 6 hours', 'Every 12 hours', 'Daily'], placeholder: 'Every 12 hours' },
     },

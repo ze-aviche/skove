@@ -1,15 +1,15 @@
 import { AgentRunResult } from './flight-watcher.js'
 import { RunnerContext } from './index.js'
 import { db } from '../../db/index.js'
-import { atsJobs, agentResults } from '../../db/schema.js'
-import { and, desc, eq, or, sql } from 'drizzle-orm'
+import { atsJobs, atsCompanies, agentResults } from '../../db/schema.js'
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm'
 import { log } from '../../lib/logger.js'
 
 interface JobTrackerConfig {
   jobTitle?: string
   location?: string
-  minSalary?: number | string
   keywords?: string
+  specialization?: string
   atsFirstOnly?: boolean
 }
 
@@ -57,11 +57,10 @@ function locationToLikePattern(loc: string): string {
   return `%${city}%`
 }
 
-async function fetchStoredATSJobs(queryText: string, locations: string[], minSalary: number): Promise<NormalisedJob[]> {
+async function fetchStoredATSJobs(queryText: string, locations: string[], specializations: string[]): Promise<NormalisedJob[]> {
   const searchText = `%${normalizeText(queryText)}%`
   const effectiveLocations = locations.length > 0 ? locations : ['remote']
 
-  // Build OR clause: each location becomes a LIKE pattern against locationSearch
   const locationClauses = effectiveLocations.map((loc) =>
     sql`${atsJobs.locationSearch} like ${locationToLikePattern(loc)}`,
   )
@@ -69,24 +68,38 @@ async function fetchStoredATSJobs(queryText: string, locations: string[], minSal
     ? locationClauses[0]
     : or(...locationClauses)
 
-  log.info('job-tracker', 'db query', { titleSearch: searchText, locations: effectiveLocations, minSalary })
+  let specializationCompanyNames: string[] | null = null
+  if (specializations.length > 0) {
+    const matchedCompanies = await db
+      .select({ name: atsCompanies.name })
+      .from(atsCompanies)
+      .where(inArray(atsCompanies.specialization, specializations))
+    specializationCompanyNames = matchedCompanies.map(c => c.name)
+  }
+
+  log.info('job-tracker', 'db query', { titleSearch: searchText, locations: effectiveLocations, specializations })
+
+  const conditions = [
+    sql`${atsJobs.titleSearch} like ${searchText}`,
+    locationCondition,
+  ]
+  if (specializationCompanyNames && specializationCompanyNames.length > 0) {
+    conditions.push(inArray(atsJobs.company, specializationCompanyNames))
+  }
 
   const rows = await db
     .select()
     .from(atsJobs)
-    .where(and(sql`${atsJobs.titleSearch} like ${searchText}`, locationCondition))
+    .where(and(...conditions))
     .orderBy(desc(atsJobs.createdAt))
     .limit(100)
 
-  const filtered = rows.filter((job) => minSalary === 0 || job.salaryMin == null || job.salaryMin >= minSalary)
-
   log.info('job-tracker', 'db query result', {
     rowsFromDb: rows.length,
-    afterSalaryFilter: filtered.length,
-    salaryFilterActive: minSalary > 0,
+    specializationFilterActive: specializations.length > 0,
   })
 
-  return filtered.map((job) => ({
+  return rows.map((job) => ({
     id: job.externalId ?? job.id,
     title: job.title,
     company: job.company,
@@ -231,24 +244,22 @@ export async function runJobApplicationTracker(
 ): Promise<AgentRunResult[]> {
   const c = config as JobTrackerConfig
   const jobTitle = String(c.jobTitle || 'Software Engineer')
-  // location is stored as comma-separated tags: "Remote, Dallas, TX"
   const locations = String(c.location || 'Remote').split(',').map((s) => s.trim()).filter(Boolean)
-  const minSalary = Number(c.minSalary) || 0
+  const specializations = c.specialization ? String(c.specialization).split(',').map(s => s.trim()).filter(Boolean) : []
   const keywords = c.keywords ? String(c.keywords) : ''
   const isRemote = locations.some((l) => l.toLowerCase().includes('remote'))
-  // For fallback external APIs, pass the first non-remote location (or "remote")
   const primaryLocation = locations.find((l) => !l.toLowerCase().includes('remote')) ?? 'remote'
   const what = [jobTitle, keywords].filter(Boolean).join(' ')
   const where = isRemote ? 'remote' : primaryLocation
 
-  log.info('job-tracker', 'run started', { userId: ctx.userId, jobTitle, locations, minSalary, keywords })
+  log.info('job-tracker', 'run started', { userId: ctx.userId, jobTitle, locations, specializations, keywords })
 
-  let jobs = await fetchStoredATSJobs(what, locations, minSalary)
+  let jobs = await fetchStoredATSJobs(what, locations, specializations)
   let jobSource = 'ats_db'
 
   if (jobs.length === 0) {
     log.info('job-tracker', 'db empty, trying adzuna', { what, where })
-    jobs = await fetchAdzuna(what, where, minSalary)
+    jobs = await fetchAdzuna(what, where, 0)
     jobSource = 'adzuna'
     log.info('job-tracker', 'adzuna fetch complete', { count: jobs.length })
   }

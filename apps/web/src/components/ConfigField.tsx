@@ -4,7 +4,13 @@ import AirportPicker from './AirportPicker'
 import CityPicker from './CityPicker'
 import DatePicker from './DatePicker'
 import LocationTagsPicker from './LocationTagsPicker'
+import JobTitlePicker from './JobTitlePicker'
 import { AgentConfigField } from '@/lib/api'
+
+const SPECIALIZATIONS = [
+  'AI/ML', 'CCaaS', 'Communication', 'Database', 'DevTools',
+  'E-commerce', 'FinTech', 'HR Tech', 'Infrastructure', 'Marketing/Analytics', 'Other',
+]
 
 const inputStyle = {
   width: '100%',
@@ -23,9 +29,10 @@ type Props = {
   field: AgentConfigField
   value: unknown
   onChange: (key: string, value: unknown) => void
+  token?: string
 }
 
-export default function ConfigField({ fieldKey, field, value, onChange }: Props) {
+export default function ConfigField({ fieldKey, field, value, onChange, token }: Props) {
   if (field.type === 'select') {
     return (
       <select
@@ -81,6 +88,51 @@ export default function ConfigField({ fieldKey, field, value, onChange }: Props)
         onChange={(v) => onChange(fieldKey, v)}
         placeholder={field.placeholder}
       />
+    )
+  }
+
+  if (field.type === 'job-title-tags') {
+    return (
+      <JobTitlePicker
+        value={String(value ?? '')}
+        onChange={(v) => onChange(fieldKey, v)}
+        placeholder={field.placeholder}
+        token={token}
+      />
+    )
+  }
+
+  if (field.type === 'specialization-tags') {
+    const selected = new Set(
+      String(value ?? '').split(',').map(s => s.trim()).filter(Boolean)
+    )
+    const toggle = (spec: string) => {
+      const next = new Set(selected)
+      next.has(spec) ? next.delete(spec) : next.add(spec)
+      onChange(fieldKey, Array.from(next).join(', '))
+    }
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {SPECIALIZATIONS.map(spec => {
+          const active = selected.has(spec)
+          return (
+            <button
+              key={spec}
+              type="button"
+              onClick={() => toggle(spec)}
+              style={{
+                fontSize: 12, fontWeight: active ? 600 : 400,
+                padding: '6px 12px', borderRadius: 20,
+                border: `1px solid ${active ? 'var(--brand)' : 'var(--border)'}`,
+                background: active ? 'var(--brand-dim)' : 'var(--surface-2)',
+                color: active ? 'var(--brand)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                transition: 'all 0.12s',
+              }}
+            >{spec}</button>
+          )
+        })}
+      </div>
     )
   }
 

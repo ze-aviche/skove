@@ -493,55 +493,58 @@ export default function ResultsPage() {
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
-                      <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{new Date(r.createdAt).toLocaleString()}</span>
-                      {!r.isRead && (
-                        <button onClick={() => handleMarkRead(r.id)} style={{
-                          fontSize: 11, fontWeight: 600,
-                          padding: '6px 10px', borderRadius: 8,
-                          border: '1px solid var(--border)',
-                          background: 'var(--surface-3)',
-                          color: 'var(--text-secondary)',
-                          cursor: 'pointer',
-                        }}>Mark read</button>
-                      )}
-                      <button
-                        onClick={() => handleFavourite(r)}
-                        title={r.isFavourite ? 'Remove from saved' : 'Save'}
-                        style={{
-                          fontSize: 16, lineHeight: 1,
-                          padding: '4px 8px', borderRadius: 7,
-                          border: `1px solid ${r.isFavourite ? 'rgba(245,158,11,0.35)' : 'var(--border)'}`,
-                          background: r.isFavourite ? 'rgba(245,158,11,0.1)' : 'transparent',
-                          color: r.isFavourite ? '#f59e0b' : 'var(--text-tertiary)',
-                          cursor: 'pointer',
-                        }}>{r.isFavourite ? '★' : '☆'}</button>
-                      {isJobResult && (
-                        <button
-                          onClick={() => handleApplied(r)}
-                          title={r.isApplied ? 'Mark as not applied' : 'Mark as applied'}
-                          style={{
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>{new Date(r.createdAt).toLocaleString()}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {!r.isRead && (
+                          <button onClick={() => handleMarkRead(r.id)} style={{
                             fontSize: 11, fontWeight: 600,
                             padding: '5px 10px', borderRadius: 7,
-                            border: `1px solid ${r.isApplied ? 'rgba(16,185,129,0.4)' : 'var(--border)'}`,
-                            background: r.isApplied ? 'rgba(16,185,129,0.12)' : 'transparent',
-                            color: r.isApplied ? 'var(--success)' : 'var(--text-tertiary)',
+                            border: '1px solid var(--border)',
+                            background: 'var(--surface-3)',
+                            color: 'var(--text-secondary)',
                             cursor: 'pointer',
                             whiteSpace: 'nowrap',
-                          }}
-                        >{r.isApplied ? '✓ Applied' : 'Mark applied'}</button>
-                      )}
-                      <button
-                        onClick={() => handleDeleteOne(r.id)}
-                        title="Delete result"
-                        style={{
-                          fontSize: 11, fontWeight: 500,
-                          padding: '5px 10px', borderRadius: 7,
-                          border: '1px solid rgba(239,68,68,0.25)',
-                          background: 'transparent',
-                          color: 'var(--red)',
-                          cursor: 'pointer',
-                        }}>Delete</button>
+                          }}>Mark read</button>
+                        )}
+                        <button
+                          onClick={() => handleFavourite(r)}
+                          title={r.isFavourite ? 'Remove from saved' : 'Save'}
+                          style={{
+                            fontSize: 15, lineHeight: 1,
+                            padding: '5px 8px', borderRadius: 7,
+                            border: `1px solid ${r.isFavourite ? 'rgba(245,158,11,0.35)' : 'var(--border)'}`,
+                            background: r.isFavourite ? 'rgba(245,158,11,0.1)' : 'transparent',
+                            color: r.isFavourite ? '#f59e0b' : 'var(--text-tertiary)',
+                            cursor: 'pointer',
+                          }}>{r.isFavourite ? '★' : '☆'}</button>
+                        {isJobResult && (
+                          <button
+                            onClick={() => handleApplied(r)}
+                            title={r.isApplied ? 'Mark as not applied' : 'Mark as applied'}
+                            style={{
+                              fontSize: 11, fontWeight: 600,
+                              padding: '5px 10px', borderRadius: 7,
+                              border: `1px solid ${r.isApplied ? 'rgba(16,185,129,0.4)' : 'var(--border)'}`,
+                              background: r.isApplied ? 'rgba(16,185,129,0.12)' : 'transparent',
+                              color: r.isApplied ? 'var(--success)' : 'var(--text-tertiary)',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >{r.isApplied ? '✓ Applied' : 'Mark applied'}</button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteOne(r.id)}
+                          title="Delete result"
+                          style={{
+                            fontSize: 11, fontWeight: 500,
+                            padding: '5px 10px', borderRadius: 7,
+                            border: '1px solid rgba(239,68,68,0.25)',
+                            background: 'transparent',
+                            color: 'var(--red)',
+                            cursor: 'pointer',
+                          }}>Delete</button>
+                      </div>
                     </div>
                   </div>
                 )
