@@ -1,9 +1,10 @@
 import { AgentRunResult } from './flight-watcher.js'
 import { RunnerContext } from './index.js'
 import { db } from '../../db/index.js'
-import { atsJobs, atsCompanies, agentResults } from '../../db/schema.js'
-import { and, desc, eq, inArray, or, sql } from 'drizzle-orm'
+import { agentResults } from '../../db/schema.js'
+import { desc, eq } from 'drizzle-orm'
 import { log } from '../../lib/logger.js'
+import { searchAtsJobs } from '../../lib/job-search.js'
 
 interface JobTrackerConfig {
   jobTitle?: string
@@ -46,58 +47,20 @@ function postedLabel(iso: string): string {
   return `${Math.floor(days / 7)} weeks ago`
 }
 
-function locationToLikePattern(loc: string): string {
-  const normalized = normalizeText(loc)
-  // Normalize all remote variants: "Remote", "USA-Remote", "US-Remote", "remote-us", etc.
-  if (normalized.includes('remote') || normalized.includes('wfh') || normalized === 'work from home') {
-    return '%remote%'
-  }
-  // Use city name only (before the comma) for broader matching
-  const city = normalized.split(',')[0].trim()
-  return `%${city}%`
-}
-
-async function fetchStoredATSJobs(queryText: string, locations: string[], specializations: string[]): Promise<NormalisedJob[]> {
-  const searchText = `%${normalizeText(queryText)}%`
+async function fetchStoredATSJobs(titles: string[], keywords: string, locations: string[], specializations: string[]): Promise<NormalisedJob[]> {
   const effectiveLocations = locations.length > 0 ? locations : ['remote']
 
-  const locationClauses = effectiveLocations.map((loc) =>
-    sql`${atsJobs.locationSearch} like ${locationToLikePattern(loc)}`,
-  )
-  const locationCondition = locationClauses.length === 1
-    ? locationClauses[0]
-    : or(...locationClauses)
+  log.info('job-tracker', 'db query', { titles, keywords, locations: effectiveLocations, specializations })
 
-  let specializationCompanyNames: string[] | null = null
-  if (specializations.length > 0) {
-    const matchedCompanies = await db
-      .select({ name: atsCompanies.name })
-      .from(atsCompanies)
-      .where(inArray(atsCompanies.specialization, specializations))
-    specializationCompanyNames = matchedCompanies.map(c => c.name)
-  }
-
-  log.info('job-tracker', 'db query', { titleSearch: searchText, locations: effectiveLocations, specializations })
-
-  const conditions = [
-    sql`${atsJobs.titleSearch} like ${searchText}`,
-    locationCondition,
-  ]
-  if (specializationCompanyNames && specializationCompanyNames.length > 0) {
-    conditions.push(inArray(atsJobs.company, specializationCompanyNames))
-  }
-
-  const rows = await db
-    .select()
-    .from(atsJobs)
-    .where(and(...conditions))
-    .orderBy(desc(atsJobs.createdAt))
-    .limit(100)
-
-  log.info('job-tracker', 'db query result', {
-    rowsFromDb: rows.length,
-    specializationFilterActive: specializations.length > 0,
+  const rows = await searchAtsJobs({
+    titles,
+    keywords: keywords || undefined,
+    locations: effectiveLocations,
+    specializations: specializations.length > 0 ? specializations : undefined,
+    limit: 100,
   })
+
+  log.info('job-tracker', 'db query result', { rowsFromDb: rows.length })
 
   return rows.map((job) => ({
     id: job.externalId ?? job.id,
@@ -243,18 +206,21 @@ export async function runJobApplicationTracker(
   ctx: RunnerContext
 ): Promise<AgentRunResult[]> {
   const c = config as JobTrackerConfig
-  const jobTitle = String(c.jobTitle || 'Software Engineer')
+  // jobTitle is comma-separated (multi-tag picker), split into individual titles
+  const titles = String(c.jobTitle || 'Software Engineer').split(',').map(s => s.trim()).filter(Boolean)
   const locations = String(c.location || 'Remote').split(',').map((s) => s.trim()).filter(Boolean)
   const specializations = c.specialization ? String(c.specialization).split(',').map(s => s.trim()).filter(Boolean) : []
   const keywords = c.keywords ? String(c.keywords) : ''
   const isRemote = locations.some((l) => l.toLowerCase().includes('remote'))
   const primaryLocation = locations.find((l) => !l.toLowerCase().includes('remote')) ?? 'remote'
-  const what = [jobTitle, keywords].filter(Boolean).join(' ')
+  // For external fallback APIs, use first title only
+  const primaryTitle = titles[0] ?? 'Software Engineer'
+  const what = [primaryTitle, keywords].filter(Boolean).join(' ')
   const where = isRemote ? 'remote' : primaryLocation
 
-  log.info('job-tracker', 'run started', { userId: ctx.userId, jobTitle, locations, specializations, keywords })
+  log.info('job-tracker', 'run started', { userId: ctx.userId, titles, locations, specializations, keywords })
 
-  let jobs = await fetchStoredATSJobs(what, locations, specializations)
+  let jobs = await fetchStoredATSJobs(titles, keywords, locations, specializations)
   let jobSource = 'ats_db'
 
   if (jobs.length === 0) {
@@ -264,14 +230,14 @@ export async function runJobApplicationTracker(
     log.info('job-tracker', 'adzuna fetch complete', { count: jobs.length })
   }
   if (jobs.length === 0) {
-    log.info('job-tracker', 'adzuna empty, trying jsearch', { query: `${jobTitle} ${where}` })
-    jobs = await fetchJSearch(`${jobTitle} ${where}`)
+    log.info('job-tracker', 'adzuna empty, trying jsearch', { query: `${primaryTitle} ${where}` })
+    jobs = await fetchJSearch(`${primaryTitle} ${where}`)
     jobSource = 'jsearch'
     log.info('job-tracker', 'jsearch fetch complete', { count: jobs.length })
   }
   if (jobs.length === 0 && isRemote) {
-    log.info('job-tracker', 'jsearch empty, trying remoteok', { jobTitle })
-    jobs = await fetchRemoteOK(jobTitle)
+    log.info('job-tracker', 'jsearch empty, trying remoteok', { primaryTitle })
+    jobs = await fetchRemoteOK(primaryTitle)
     jobSource = 'remoteok'
     log.info('job-tracker', 'remoteok fetch complete', { count: jobs.length })
   }

@@ -1,30 +1,16 @@
 import { Router } from 'express'
 import { db } from '../db/index.js'
 import { atsJobs, agentResults, users } from '../db/schema.js'
-import { and, or, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { requireAuth } from '../lib/auth.js'
 import { log } from '../lib/logger.js'
 import { scoreJobMatch, tailorResume } from '../lib/claude.js'
+import { searchAtsJobs, countAtsJobs } from '../lib/job-search.js'
 
 export const jobsRouter = Router()
 
 function normalizeText(value?: string) {
   return String(value ?? '').trim().toLowerCase()
-}
-
-function buildLocationPattern(loc: string): string {
-  const n = normalizeText(loc)
-  if (n.includes('remote') || n.includes('wfh')) return '%remote%'
-
-  // Handle country-level searches: "US" → match "us" in location
-  if (n === 'us' || n === 'usa' || n === 'united states') return '%us%'
-  if (n === 'uk' || n === 'gb' || n === 'united kingdom') return '%uk%'
-  if (n === 'ca' || n === 'canada') return '%ca%'
-  if (n === 'au' || n === 'australia') return '%australia%'
-
-  // For city searches, extract the first part (before comma) or use as-is
-  const city = n.split(',')[0].trim()
-  return `%${city}%`
 }
 
 // GET /api/jobs/search — query ats_jobs with optional filters
@@ -39,67 +25,21 @@ jobsRouter.get('/search', requireAuth, async (req, res) => {
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 25))
     const offset = (page - 1) * limit
 
-    // Build conditions in selectivity order: location → specialization → company → title
-    const conditions = []
-
-    // 1. Location — most selective
-    if (location) {
-      const locations = location.split(',').map(l => l.trim()).filter(Boolean)
-      if (locations.length > 0) {
-        const locationConds = locations.map(l => sql`${atsJobs.locationSearch} like ${buildLocationPattern(l)}`)
-        conditions.push(locations.length === 1 ? locationConds[0] : or(...locationConds))
-      }
+    const params = {
+      titles: title ? title.split(',').map(t => t.trim()).filter(Boolean) : undefined,
+      company: company || undefined,
+      locations: location ? location.split(',').map(l => l.trim()).filter(Boolean) : undefined,
+      specializations: specialization ? [specialization] : undefined,
+      limit,
+      offset,
     }
 
-    // 2. Specialization — EXISTS with DISTINCT ON to avoid duplicate ats_companies rows
-    // (ats_companies can have multiple rows for the same company name from different ATS sources)
-    if (specialization) {
-      conditions.push(sql`EXISTS (
-        SELECT 1 FROM (
-          SELECT DISTINCT ON (lower(name)) name, specialization
-          FROM ats_companies
-          WHERE specialization IS NOT NULL
-          ORDER BY lower(name), specialization
-        ) uc
-        WHERE lower(uc.name) = lower(${atsJobs.company})
-        AND lower(uc.specialization) = lower(${specialization})
-      )`)
-    }
+    const [jobs, total] = await Promise.all([
+      searchAtsJobs(params),
+      countAtsJobs(params),
+    ])
 
-    // 3. Company LIKE
-    if (company) {
-      const companies = company.split(',').map(c => c.trim()).filter(Boolean)
-      if (companies.length > 0) {
-        const companyConds = companies.map(c => sql`${atsJobs.companySearch} like ${'%' + normalizeText(c) + '%'}`)
-        conditions.push(companies.length === 1 ? companyConds[0] : or(...companyConds))
-      }
-    }
-
-    // 4. Title LIKE — least selective
-    if (title) {
-      const titles = title.split(',').map(t => t.trim()).filter(Boolean)
-      if (titles.length > 0) {
-        const titleConds = titles.map(t => sql`${atsJobs.titleSearch} like ${'%' + normalizeText(t) + '%'}`)
-        conditions.push(titles.length === 1 ? titleConds[0] : or(...titleConds))
-      }
-    }
-
-    const where = conditions.length > 0 ? and(...conditions) : undefined
-
-    const [{ total }] = await db
-      .select({ total: sql<string>`count(*)` })
-      .from(atsJobs)
-      .where(where)
-
-    const jobs = await db
-      .select()
-      .from(atsJobs)
-      .where(where)
-      .orderBy(desc(atsJobs.createdAt))
-      .limit(limit)
-      .offset(offset)
-
-    res.json({ jobs, total: Number(total), page, limit })
+    res.json({ jobs, total, page, limit })
   } catch (err) {
     log.error('api', 'GET /api/jobs/search failed', err)
     res.status(500).json({ error: 'Search failed' })
