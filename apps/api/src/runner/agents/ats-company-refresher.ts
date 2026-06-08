@@ -328,6 +328,8 @@ async function fetchCompanyJobs(company: {
   return []
 }
 
+const MAX_DESCRIPTION_LENGTH = 10_000
+
 async function persistJobs(jobs: NormalisedJob[]): Promise<void> {
   if (jobs.length === 0) return
   const now = new Date()
@@ -342,7 +344,7 @@ async function persistJobs(jobs: NormalisedJob[]): Promise<void> {
       location: enrichedLocation,
       salaryMin: job.salaryMin,
       salaryMax: job.salaryMax,
-      description: job.description,
+      description: job.description ? job.description.slice(0, MAX_DESCRIPTION_LENGTH) : undefined,
       postedAt: job.postedAt,
       metadata: { source: job.source },
       titleSearch: normalizeText(job.title),
@@ -379,8 +381,12 @@ export async function runATSCompanyRefresher(): Promise<void> {
 
   // Clean up jobs older than 14 days
   const retentionCutoff = new Date(Date.now() - RETENTION_MS)
-  const deleted = await db.delete(atsJobs).where(lt(atsJobs.createdAt, retentionCutoff)).returning({ id: atsJobs.id })
-  log.info('ats-refresher', 'old jobs cleaned up', { deleted: deleted.length, cutoff: retentionCutoff })
+  const [{ deletedCount }] = await db
+    .select({ deletedCount: sql<number>`count(*)` })
+    .from(atsJobs)
+    .where(lt(atsJobs.createdAt, retentionCutoff))
+  await db.delete(atsJobs).where(lt(atsJobs.createdAt, retentionCutoff))
+  log.info('ats-refresher', 'old jobs cleaned up', { deleted: deletedCount, cutoff: retentionCutoff })
 
   // Pick the BATCH_SIZE companies with oldest lastFetchedAt, secondary sort by ats_type
   // to naturally interleave providers across the batch

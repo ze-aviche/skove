@@ -3,7 +3,7 @@ config({ path: '.env.local' })
 
 import { db } from './index.js'
 import { atsJobs } from './schema.js'
-import { sql } from 'drizzle-orm'
+import { sql, count } from 'drizzle-orm'
 
 // Target countries for jobs
 const TARGET_COUNTRIES = ['us', 'india', 'australia', 'uk', 'remote']
@@ -26,9 +26,9 @@ export async function cleanupStaleJobs(): Promise<{ deleted: number; remaining: 
     `
   ).returning()
 
-  const remaining = await db.select().from(atsJobs)
+  const [{ remaining }] = await db.select({ remaining: count() }).from(atsJobs)
 
-  return { deleted: result.length, remaining: remaining.length }
+  return { deleted: result.length, remaining }
 }
 
 async function main() {

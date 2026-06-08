@@ -169,26 +169,32 @@ export async function runInstance(instanceId: string) {
 }
 
 async function sendMorningDigest() {
-  // Find all users who have unread results
+  // Find all users who have unread results (cap per-run to avoid loading unbounded rows)
   const unreadRows = await db
-    .select()
+    .select({
+      userId: agentResults.userId,
+      title: agentResults.title,
+      value: agentResults.value,
+      url: agentResults.url,
+      agentName: agentDefinitions.name,
+    })
     .from(agentResults)
     .innerJoin(agentInstances, eq(agentResults.instanceId, agentInstances.id))
     .innerJoin(agentDefinitions, eq(agentInstances.agentId, agentDefinitions.id))
     .where(eq(agentResults.isRead, false))
+    .limit(5000)
 
   if (unreadRows.length === 0) return
 
   // Group unread results by userId
   const byUser = new Map<string, DigestItem[]>()
   for (const row of unreadRows) {
-    const userId = row.agent_results.userId
-    if (!byUser.has(userId)) byUser.set(userId, [])
-    byUser.get(userId)!.push({
-      agentName: row.agent_definitions.name,
-      title: row.agent_results.title,
-      value: row.agent_results.value,
-      url: row.agent_results.url,
+    if (!byUser.has(row.userId)) byUser.set(row.userId, [])
+    byUser.get(row.userId)!.push({
+      agentName: row.agentName,
+      title: row.title,
+      value: row.value,
+      url: row.url,
     })
   }
 
