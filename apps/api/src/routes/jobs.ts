@@ -141,6 +141,48 @@ jobsRouter.get('/suggestions', requireAuth, async (req, res) => {
   }
 })
 
+// POST /api/jobs/:atsJobId/save — save without scoring (idempotent)
+jobsRouter.post('/:atsJobId/save', requireAuth, async (req, res) => {
+  try {
+    const [job] = await db.select().from(atsJobs).where(eq(atsJobs.id, req.params.atsJobId))
+    if (!job) return res.status(404).json({ error: 'Job not found' })
+
+    const existing = await db.select().from(agentResults).where(
+      and(eq(agentResults.userId, req.userId!), eq(agentResults.url, job.applyUrl))
+    )
+
+    if (existing[0]) return res.json({ result: existing[0], created: false })
+
+    const salary = job.salaryMin || job.salaryMax
+      ? [job.salaryMin ? `$${Math.round(job.salaryMin / 1000)}k` : null, job.salaryMax ? `$${Math.round(job.salaryMax / 1000)}k` : null].filter(Boolean).join('–')
+      : undefined
+
+    const [created] = await db.insert(agentResults).values({
+      instanceId: null,
+      userId: req.userId!,
+      title: `${job.title} at ${job.company}`,
+      url: job.applyUrl,
+      metadata: {
+        agentType: 'job-application-tracker',
+        jobTitle: job.title,
+        company: job.company,
+        location: job.location,
+        description: job.description,
+        salary,
+        source: job.source,
+        atsJobId: job.id,
+      },
+      isRead: false,
+      isFavourite: false,
+    }).returning()
+
+    res.json({ result: created, created: true })
+  } catch (err) {
+    log.error('api', 'POST /api/jobs/:id/save failed', err, { atsJobId: req.params.atsJobId, userId: req.userId })
+    res.status(500).json({ error: 'Save failed' })
+  }
+})
+
 // POST /api/jobs/:atsJobId/save-and-score
 // Saves the ats_job as an agentResult for this user and runs AI scoring.
 // Idempotent: re-running on an already-saved job returns the existing result.

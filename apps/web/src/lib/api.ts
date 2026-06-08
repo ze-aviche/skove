@@ -254,6 +254,13 @@ export function toggleFavourite(resultId: string, token?: string): Promise<Agent
   })
 }
 
+export function saveJob(atsJobId: string, token?: string): Promise<{ result: AgentResult; created: boolean }> {
+  return fetchJson(`/api/jobs/${atsJobId}/save`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
 export function toggleApplied(resultId: string, token?: string): Promise<AgentResult> {
   return fetchJson<AgentResult>(`/api/results/${resultId}/applied`, {
     method: 'PATCH',
