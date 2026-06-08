@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
-import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, scoreResult, toggleFavourite, AgentResult } from '@/lib/api'
+import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, scoreResult, toggleFavourite, toggleApplied, AgentResult } from '@/lib/api'
 
-type Tab = 'All' | 'Unread' | 'Saved' | 'Flights' | 'Jobs' | 'Rentals' | 'Stocks' | 'News'
-const TABS: Tab[] = ['All', 'Unread', 'Saved', 'Flights', 'Jobs', 'Rentals', 'Stocks', 'News']
+type Tab = 'All' | 'Unread' | 'Saved' | 'Applied' | 'Flights' | 'Jobs' | 'Rentals' | 'Stocks' | 'News'
+const TABS: Tab[] = ['All', 'Unread', 'Saved', 'Applied', 'Flights', 'Jobs', 'Rentals', 'Stocks', 'News']
 
 function agentType(r: AgentResult): string {
   return typeof r.metadata === 'object' && r.metadata !== null && 'agentType' in r.metadata
@@ -43,6 +43,7 @@ function matchesTab(r: AgentResult, tab: Tab): boolean {
   if (tab === 'All') return true
   if (tab === 'Unread') return !r.isRead
   if (tab === 'Saved') return r.isFavourite
+  if (tab === 'Applied') return r.isApplied
   const t = agentType(r)
   if (tab === 'Flights') return t.includes('flight')
   if (tab === 'Jobs') return t.includes('job')
@@ -201,6 +202,17 @@ export default function ResultsPage() {
       showToast({ message: updated.isFavourite ? 'Added to saved' : 'Removed from saved', variant: 'success' })
     } catch (err) {
       showToast({ message: err instanceof Error ? err.message : 'Failed to update', variant: 'error' })
+    }
+  }
+
+  const handleApplied = async (r: AgentResult) => {
+    try {
+      const token = await auth.getToken()
+      const updated = await toggleApplied(r.id, token)
+      setResults(prev => prev.map(x => x.id === updated.id ? updated : x))
+      showToast({ message: updated.isApplied ? 'Marked as applied' : 'Removed from applied', variant: 'success' })
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'Failed to update applied status', variant: 'error' })
     }
   }
 
@@ -504,6 +516,21 @@ export default function ResultsPage() {
                           color: r.isFavourite ? '#f59e0b' : 'var(--text-tertiary)',
                           cursor: 'pointer',
                         }}>{r.isFavourite ? '★' : '☆'}</button>
+                      {isJobResult && (
+                        <button
+                          onClick={() => handleApplied(r)}
+                          title={r.isApplied ? 'Mark as not applied' : 'Mark as applied'}
+                          style={{
+                            fontSize: 11, fontWeight: 600,
+                            padding: '5px 10px', borderRadius: 7,
+                            border: `1px solid ${r.isApplied ? 'rgba(16,185,129,0.4)' : 'var(--border)'}`,
+                            background: r.isApplied ? 'rgba(16,185,129,0.12)' : 'transparent',
+                            color: r.isApplied ? 'var(--success)' : 'var(--text-tertiary)',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >{r.isApplied ? '✓ Applied' : 'Mark applied'}</button>
+                      )}
                       <button
                         onClick={() => handleDeleteOne(r.id)}
                         title="Delete result"
