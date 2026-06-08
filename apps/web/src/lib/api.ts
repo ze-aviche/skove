@@ -63,6 +63,8 @@ export type AgentResult = {
   metadata?: Record<string, unknown>
   isRead: boolean
   isFavourite: boolean
+  isApplied: boolean
+  appliedAt?: string | null
   createdAt: string
 }
 
@@ -247,6 +249,13 @@ export function scoreResult(resultId: string, token?: string): Promise<{ already
 
 export function toggleFavourite(resultId: string, token?: string): Promise<AgentResult> {
   return fetchJson<AgentResult>(`/api/results/${resultId}/favourite`, {
+    method: 'PATCH',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
+export function toggleApplied(resultId: string, token?: string): Promise<AgentResult> {
+  return fetchJson<AgentResult>(`/api/results/${resultId}/applied`, {
     method: 'PATCH',
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })

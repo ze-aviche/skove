@@ -47,6 +47,8 @@ export const agentResults = pgTable('agent_results', {
   metadata: jsonb('metadata'), // any extra data the agent wants to store
   isRead: boolean('is_read').default(false).notNull(),
   isFavourite: boolean('is_favourite').default(false).notNull(),
+  isApplied: boolean('is_applied').default(false).notNull(),
+  appliedAt: timestamp('applied_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 

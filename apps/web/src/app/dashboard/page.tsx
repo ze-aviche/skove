@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@clerk/nextjs'
-import { getAgentDefinitions, getMyAgents, getResults, AgentDefinition, AgentInstance, AgentResult } from '@/lib/api'
+import { useToast } from '@/app/providers'
+import { getAgentDefinitions, getMyAgents, getResults, toggleApplied, AgentDefinition, AgentInstance, AgentResult } from '@/lib/api'
 
 function postedLabel(iso: string): string {
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
@@ -62,6 +63,18 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const auth = useAuth()
+  const { showToast } = useToast()
+
+  const handleToggleApplied = async (resultId: string) => {
+    try {
+      const token = await auth.getToken()
+      const updated = await toggleApplied(resultId, token)
+      setResults(prev => prev.map(r => r.id === resultId ? updated : r))
+      showToast({ message: updated.isApplied ? 'Marked as applied' : 'Removed from applied', variant: 'success' })
+    } catch {
+      showToast({ message: 'Failed to update applied status', variant: 'error' })
+    }
+  }
   useEffect(() => {
     async function loadDashboard() {
       try {
@@ -328,6 +341,96 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Applied Jobs */}
+          {(() => {
+            const appliedJobs = results.filter(r => r.isApplied && (r.metadata as any)?.atsJobId)
+            if (appliedJobs.length === 0) return null
+            return (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <h2 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
+                    Applied jobs <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>({appliedJobs.length})</span>
+                  </h2>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 10 }}>
+                  {appliedJobs.map(r => {
+                    const meta = (r.metadata ?? {}) as Record<string, any>
+                    const matchScore = meta.matchScore != null ? Number(meta.matchScore) : null
+                    return (
+                      <div key={r.id} style={{
+                        background: 'var(--surface-2)',
+                        border: '1px solid rgba(16,185,129,0.25)',
+                        borderRadius: 12,
+                        padding: '12px 14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 6,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                          <div style={{
+                            width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                            background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 11, fontWeight: 700, color: 'var(--success)',
+                          }}>
+                            {(meta.company ?? '?').slice(0, 2).toUpperCase()}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {meta.jobTitle ?? r.title}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                              <span style={{ fontWeight: 500 }}>{meta.company}</span>
+                              {meta.location && <><span style={{ color: 'var(--text-tertiary)' }}>·</span><span>{meta.location}</span></>}
+                            </div>
+                          </div>
+                          {matchScore !== null && !isNaN(matchScore) && (
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, flexShrink: 0,
+                              padding: '2px 7px', borderRadius: 99,
+                              background: matchScore >= 8 ? 'var(--success-dim)' : 'var(--brand-dim)',
+                              color: matchScore >= 8 ? 'var(--success)' : 'var(--brand)',
+                              border: `1px solid ${matchScore >= 8 ? 'rgba(16,185,129,0.2)' : 'rgba(59,130,246,0.2)'}`,
+                            }}>{matchScore}/10</span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+                          <span style={{ fontSize: 11, color: 'var(--success)', fontWeight: 500 }}>
+                            ✓ Applied {r.appliedAt ? postedLabel(r.appliedAt) : ''}
+                          </span>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              onClick={() => handleToggleApplied(r.id)}
+                              title="Undo applied"
+                              style={{
+                                fontSize: 11, fontWeight: 500,
+                                padding: '3px 9px', borderRadius: 6,
+                                border: '1px solid var(--border)',
+                                background: 'var(--surface-3)',
+                                color: 'var(--text-tertiary)',
+                                cursor: 'pointer',
+                              }}
+                            >Undo</button>
+                            {r.url && (
+                              <a href={r.url} target="_blank" rel="noreferrer" style={{
+                                fontSize: 11, fontWeight: 500,
+                                padding: '3px 10px', borderRadius: 6,
+                                border: '1px solid var(--border)',
+                                background: 'var(--surface-3)',
+                                color: 'var(--text-secondary)',
+                                textDecoration: 'none',
+                              }}>View →</a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+
           {/* Saved Jobs */}
           {(() => {
             const savedJobs = results.filter(r => r.isFavourite && (r.metadata as any)?.atsJobId)
@@ -386,16 +489,30 @@ export default function DashboardPage() {
                           <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
                             {meta.postedAt ? postedLabel(meta.postedAt) : postedLabel(r.createdAt)} · ★ saved
                           </span>
-                          {r.url && (
-                            <a href={r.url} target="_blank" rel="noreferrer" style={{
-                              fontSize: 11, fontWeight: 500,
-                              padding: '3px 10px', borderRadius: 6,
-                              border: '1px solid var(--border)',
-                              background: 'var(--surface-3)',
-                              color: 'var(--text-secondary)',
-                              textDecoration: 'none',
-                            }}>Apply →</a>
-                          )}
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              onClick={() => handleToggleApplied(r.id)}
+                              title={r.isApplied ? 'Mark as not applied' : 'Mark as applied'}
+                              style={{
+                                fontSize: 11, fontWeight: 600,
+                                padding: '3px 9px', borderRadius: 6,
+                                border: `1px solid ${r.isApplied ? 'rgba(16,185,129,0.4)' : 'var(--border)'}`,
+                                background: r.isApplied ? 'rgba(16,185,129,0.12)' : 'var(--surface-3)',
+                                color: r.isApplied ? 'var(--success)' : 'var(--text-tertiary)',
+                                cursor: 'pointer',
+                              }}
+                            >{r.isApplied ? '✓ Applied' : 'Mark applied'}</button>
+                            {r.url && (
+                              <a href={r.url} target="_blank" rel="noreferrer" style={{
+                                fontSize: 11, fontWeight: 500,
+                                padding: '3px 10px', borderRadius: 6,
+                                border: '1px solid var(--border)',
+                                background: 'var(--surface-3)',
+                                color: 'var(--text-secondary)',
+                                textDecoration: 'none',
+                              }}>Apply →</a>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
-import { searchJobs, saveAndScoreJob, downloadDocument, toggleFavourite, AtsJob, AgentResult } from '@/lib/api'
+import { searchJobs, saveAndScoreJob, downloadDocument, toggleFavourite, toggleApplied, AtsJob, AgentResult } from '@/lib/api'
 import JobTitlePicker from '@/components/JobTitlePicker'
 import CompanyPicker from '@/components/CompanyPicker'
 import LocationTagsPicker from '@/components/LocationTagsPicker'
@@ -127,6 +127,17 @@ export default function ExplorePage() {
       showToast({ message: updated.isFavourite ? 'Saved to favourites' : 'Removed from favourites', variant: 'success' })
     } catch {
       showToast({ message: 'Failed to update favourite', variant: 'error' })
+    }
+  }
+
+  const handleToggleApplied = async (resultId: string) => {
+    try {
+      const token = await getToken()
+      const updated = await toggleApplied(resultId, token)
+      setJobs(prev => prev.map(j => j.result?.id === resultId ? { ...j, result: updated } : j))
+      showToast({ message: updated.isApplied ? 'Marked as applied' : 'Removed from applied', variant: 'success' })
+    } catch {
+      showToast({ message: 'Failed to update applied status', variant: 'error' })
     }
   }
 
@@ -333,18 +344,33 @@ export default function ExplorePage() {
                       {/* Actions */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                         {result && (
-                          <button
-                            onClick={() => handleToggleFavourite(result.id)}
-                            title={result.isFavourite ? 'Remove from saved' : 'Save job'}
-                            style={{
-                              fontSize: 15, lineHeight: 1,
-                              padding: '5px 8px', borderRadius: 7,
-                              border: `1px solid ${result.isFavourite ? 'rgba(245,158,11,0.35)' : 'var(--border)'}`,
-                              background: result.isFavourite ? 'rgba(245,158,11,0.1)' : 'transparent',
-                              color: result.isFavourite ? '#f59e0b' : 'var(--text-tertiary)',
-                              cursor: 'pointer',
-                            }}
-                          >{result.isFavourite ? '★' : '☆'}</button>
+                          <>
+                            <button
+                              onClick={() => handleToggleFavourite(result.id)}
+                              title={result.isFavourite ? 'Remove from saved' : 'Save job'}
+                              style={{
+                                fontSize: 15, lineHeight: 1,
+                                padding: '5px 8px', borderRadius: 7,
+                                border: `1px solid ${result.isFavourite ? 'rgba(245,158,11,0.35)' : 'var(--border)'}`,
+                                background: result.isFavourite ? 'rgba(245,158,11,0.1)' : 'transparent',
+                                color: result.isFavourite ? '#f59e0b' : 'var(--text-tertiary)',
+                                cursor: 'pointer',
+                              }}
+                            >{result.isFavourite ? '★' : '☆'}</button>
+                            <button
+                              onClick={() => handleToggleApplied(result.id)}
+                              title={result.isApplied ? 'Mark as not applied' : 'Mark as applied'}
+                              style={{
+                                fontSize: 11, fontWeight: 600,
+                                padding: '5px 10px', borderRadius: 7,
+                                border: `1px solid ${result.isApplied ? 'rgba(16,185,129,0.4)' : 'var(--border)'}`,
+                                background: result.isApplied ? 'rgba(16,185,129,0.12)' : 'transparent',
+                                color: result.isApplied ? 'var(--success)' : 'var(--text-tertiary)',
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >{result.isApplied ? '✓ Applied' : 'Mark applied'}</button>
+                          </>
                         )}
                         <a
                           href={job.applyUrl}
