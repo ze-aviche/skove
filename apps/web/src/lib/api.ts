@@ -275,7 +275,7 @@ export function fetchSuggestions(field: 'title' | 'company', q: string, token?: 
 export function searchJobs(
   params: { title?: string; company?: string; location?: string; specialization?: string; page?: number; limit?: number },
   token?: string,
-): Promise<{ jobs: AtsJob[]; total: number; page: number; limit: number }> {
+): Promise<{ jobs: AtsJob[]; total: number; page: number; limit: number; userResults: AgentResult[] }> {
   const qs = new URLSearchParams()
   if (params.title)         qs.set('title',         params.title)
   if (params.company)       qs.set('company',       params.company)

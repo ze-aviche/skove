@@ -93,7 +93,8 @@ export default function ExplorePage() {
       setToken(tok ?? undefined)
       const token = tok
       const res = await searchJobs({ title: titleQ, company: companyQ, location: locationQ, specialization: specializationQ, page: newPage, limit: PAGE_SIZE }, token)
-      setJobs(res.jobs.map(j => ({ atsJob: j })))
+      const resultsByAtsJobId = new Map((res.userResults ?? []).map(r => [(r.metadata as any)?.atsJobId as string, r]))
+      setJobs(res.jobs.map(j => ({ atsJob: j, result: resultsByAtsJobId.get(j.id) })))
       setTotal(res.total)
       setPage(newPage)
       setSearched(true)

@@ -39,7 +39,23 @@ jobsRouter.get('/search', requireAuth, async (req, res) => {
       countAtsJobs(params),
     ])
 
-    res.json({ jobs, total, page, limit })
+    // Fetch the user's existing agentResults for the returned jobs so the
+    // frontend can show saved/applied state without a separate round-trip.
+    // Page size is capped at 50 so filtering in JS is fine.
+    let userResults: (typeof agentResults.$inferSelect)[] = []
+    if (jobs.length > 0) {
+      const jobIdSet = new Set(jobs.map(j => j.id))
+      const allResults = await db
+        .select()
+        .from(agentResults)
+        .where(eq(agentResults.userId, req.userId!))
+      userResults = allResults.filter(r => {
+        const meta = (r.metadata ?? {}) as Record<string, unknown>
+        return typeof meta.atsJobId === 'string' && jobIdSet.has(meta.atsJobId)
+      })
+    }
+
+    res.json({ jobs, total, page, limit, userResults })
   } catch (err) {
     log.error('api', 'GET /api/jobs/search failed', err)
     res.status(500).json({ error: 'Search failed' })
