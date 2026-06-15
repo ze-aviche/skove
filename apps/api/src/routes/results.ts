@@ -14,7 +14,7 @@ resultsRouter.get('/', requireAuth, async (req, res) => {
     const results = await db.select().from(agentResults)
       .where(eq(agentResults.userId, req.userId!))
       .orderBy(desc(agentResults.createdAt))
-      .limit(100)
+      .limit(1000)
     res.json(results)
   } catch (err) {
     log.error('api', 'GET /api/results failed', err, { userId: req.userId })
