@@ -178,6 +178,11 @@ Keep answers concise and appropriate to the question type: short phrases for fac
 
 CRITICAL: If a question lists its allowed choices (e.g. ends with "(choose exactly one of: Yes | No)"), your answer MUST be EXACTLY one of those choices, copied verbatim, and NOTHING else — no explanation, no rephrasing. For a Yes/No question, answer literally "Yes" or "No". Use the profile's needsSponsorship (true → requires sponsorship → "Yes") and workAuthorization to decide sponsorship/visa questions.
 
+YES/NO QUESTIONS — never leave blank. Questions that begin with "Do you", "Have you", "Are you", "Will you", "Can you", "Would you", or "Are you willing/able" are almost always Yes/No and MUST be answered "Yes" or "No":
+- Experience/skill questions ("Do you have 10+ years…", "Do you have experience with…"): answer "Yes" if the resume plausibly supports it (related roles, adjacent tech, transferable experience count); only answer "No" if the resume clearly contradicts it.
+- Willingness/ability questions ("Are you willing to travel…", "Are you able to relocate…", "Can you start by…"): default to "Yes" unless the profile explicitly indicates otherwise.
+Reserve an empty string ONLY for open-ended factual fields you genuinely cannot derive (e.g. a specific reference's phone number) — never for a Yes/No question.
+
 CANDIDATE PROFILE:
 ${JSON.stringify(profile)}
 
