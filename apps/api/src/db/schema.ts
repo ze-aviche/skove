@@ -12,6 +12,40 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
+// Structured applicant profile used to auto-fill ATS application forms
+export const profiles = pgTable('profiles', {
+  userId: text('user_id').primaryKey().references(() => users.id),
+  firstName: text('first_name'),
+  lastName: text('last_name'),
+  phone: text('phone'),
+  city: text('city'),
+  country: text('country'),
+  workAuthorization: text('work_authorization'), // e.g. 'citizen', 'visa', 'needs-sponsorship'
+  needsSponsorship: boolean('needs_sponsorship'),
+  linkedinUrl: text('linkedin_url'),
+  githubUrl: text('github_url'),
+  portfolioUrl: text('portfolio_url'),
+  workHistory: jsonb('work_history'), // Array<{ company, title, start, end, summary }>
+  education: jsonb('education'),       // Array<{ school, degree, field, start, end }>
+  eeoAnswers: jsonb('eeo_answers'),    // { gender, race, veteran, disability } — all optional
+  resumeFileUrl: text('resume_file_url'), // populated once object storage lands (Phase 3)
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// One row per AI Apply attempt — audit trail distinct from the manual isApplied toggle
+export const applications = pgTable('applications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull().references(() => users.id),
+  resultId: uuid('result_id').references(() => agentResults.id),
+  atsType: text('ats_type'), // 'greenhouse' | 'lever' | 'ashby' | 'workday' | 'unknown'
+  status: text('status').default('draft').notNull(), // 'draft' | 'submitted' | 'failed'
+  payload: jsonb('payload'), // the filled field set that was generated / submitted
+  error: text('error'),
+  submittedAt: timestamp('submitted_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+
 // Agent definitions (built-in + marketplace)
 export const agentDefinitions = pgTable('agent_definitions', {
   id: text('id').primaryKey(), // e.g. 'flight-watcher'

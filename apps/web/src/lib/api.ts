@@ -316,6 +316,45 @@ export function triggerAtsRefresh(token?: string): Promise<{ message: string }> 
   })
 }
 
+// ── Profile ──────────────────────────────────────────────────────────────────
+
+export type WorkHistoryItem = { company?: string; title?: string; start?: string; end?: string; summary?: string }
+export type EducationItem = { school?: string; degree?: string; field?: string; start?: string; end?: string }
+
+export type Profile = {
+  userId: string
+  firstName: string | null
+  lastName: string | null
+  phone: string | null
+  city: string | null
+  country: string | null
+  workAuthorization: string | null
+  needsSponsorship: boolean | null
+  linkedinUrl: string | null
+  githubUrl: string | null
+  portfolioUrl: string | null
+  workHistory: WorkHistoryItem[] | null
+  education: EducationItem[] | null
+  eeoAnswers: Record<string, string> | null
+  resumeFileUrl: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type ProfileInput = Partial<Omit<Profile, 'userId' | 'createdAt' | 'updatedAt' | 'resumeFileUrl'>>
+
+export function getProfile(token?: string): Promise<{ profile: Profile | null }> {
+  return fetchJson('/api/profile', token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
+}
+
+export function saveProfile(input: ProfileInput, token?: string): Promise<{ profile: Profile }> {
+  return fetchJson('/api/profile', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
 export async function uploadResume(file: File, token?: string): Promise<{ success: boolean; wordCount: number; pages: number }> {
   const form = new FormData()
   form.append('resume', file)

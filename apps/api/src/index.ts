@@ -8,6 +8,7 @@ import { agentsRouter } from './routes/agents.js'
 import { resultsRouter } from './routes/results.js'
 import { webhooksRouter } from './routes/webhooks.js'
 import { resumeRouter } from './routes/resume.js'
+import { profileRouter } from './routes/profile.js'
 import { billingRouter } from './routes/billing.js'
 import { adminRouter } from './routes/admin.js'
 import { downloadRouter } from './routes/download.js'
@@ -39,6 +40,7 @@ app.use('/api/agents', agentsRouter)
 app.use('/api/results', resultsRouter)
 app.use('/api/webhooks', webhooksRouter)
 app.use('/api/resume', resumeRouter)
+app.use('/api/profile', profileRouter)
 app.use('/api/billing', billingRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/download', downloadRouter)

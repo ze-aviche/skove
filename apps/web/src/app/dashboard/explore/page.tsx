@@ -391,7 +391,7 @@ export default function ExplorePage() {
                             whiteSpace: 'nowrap',
                           }}
                         >
-                          Apply →
+                          View job →
                         </a>
                         {result ? (
                           <button

@@ -4,8 +4,31 @@ import { useEffect, useState } from 'react'
 import { useAuth, useClerk } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/app/providers'
-import { getBillingPlan, createCheckoutSession, createBillingPortalSession, UserPlan } from '@/lib/api'
+import { getBillingPlan, createCheckoutSession, createBillingPortalSession, UserPlan, getProfile, saveProfile, ProfileInput } from '@/lib/api'
 import { useSearchParams } from 'next/navigation'
+
+const EMPTY_PROFILE: ProfileInput = {
+  firstName: '', lastName: '', phone: '', city: '', country: '',
+  workAuthorization: '', needsSponsorship: false,
+  linkedinUrl: '', githubUrl: '', portfolioUrl: '',
+}
+
+const WORK_AUTH_OPTIONS = [
+  { value: '', label: 'Select…' },
+  { value: 'citizen', label: 'Citizen / Permanent resident' },
+  { value: 'visa', label: 'Authorized on a visa' },
+  { value: 'needs-sponsorship', label: 'Need sponsorship' },
+]
+
+const inputStyle: React.CSSProperties = {
+  fontSize: 13, padding: '8px 11px', borderRadius: 8,
+  border: '1px solid var(--border)', background: 'var(--surface-3)',
+  color: 'var(--text-primary)', width: '100%', outline: 'none',
+}
+
+const labelStyle: React.CSSProperties = {
+  fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 5, display: 'block',
+}
 
 const PLAN_LABELS: Record<string, { label: string; color: string; bg: string; border: string }> = {
   free:  { label: 'Free',  color: '#6b7280', bg: 'rgba(107,114,128,0.1)', border: 'rgba(107,114,128,0.2)' },
@@ -16,6 +39,8 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [billing, setBilling] = useState<UserPlan | null>(null)
   const [billingLoading, setBillingLoading] = useState(false)
+  const [profile, setProfile] = useState<ProfileInput>(EMPTY_PROFILE)
+  const [savingProfile, setSavingProfile] = useState(false)
   const auth = useAuth()
   const { showToast } = useToast()
   const searchParams = useSearchParams()
@@ -24,12 +49,41 @@ export default function ProfilePage() {
     async function load() {
       try {
         const token = await auth.getToken()
-        setBilling(await getBillingPlan(token))
+        const [billingRes, profileRes] = await Promise.all([
+          getBillingPlan(token).catch(() => null),
+          getProfile(token).catch(() => null),
+        ])
+        if (billingRes) setBilling(billingRes)
+        if (profileRes?.profile) {
+          const p = profileRes.profile
+          setProfile({
+            firstName: p.firstName ?? '', lastName: p.lastName ?? '',
+            phone: p.phone ?? '', city: p.city ?? '', country: p.country ?? '',
+            workAuthorization: p.workAuthorization ?? '', needsSponsorship: p.needsSponsorship ?? false,
+            linkedinUrl: p.linkedinUrl ?? '', githubUrl: p.githubUrl ?? '', portfolioUrl: p.portfolioUrl ?? '',
+          })
+        }
       } catch { /* non-fatal */ }
       finally { setLoading(false) }
     }
     load()
   }, [])
+
+  const setField = (key: keyof ProfileInput, value: string | boolean) =>
+    setProfile(prev => ({ ...prev, [key]: value }))
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true)
+    try {
+      const token = await auth.getToken()
+      await saveProfile(profile, token)
+      showToast({ message: 'Application info saved.', variant: 'success' })
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'Failed to save', variant: 'error' })
+    } finally {
+      setSavingProfile(false)
+    }
+  }
 
   useEffect(() => {
     if (searchParams.get('upgraded') === '1') {
@@ -139,6 +193,74 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+      <div style={{
+        marginTop: 16, background: 'var(--surface-2)', border: '1px solid var(--border)',
+        borderRadius: 14, padding: 24,
+      }}>
+        <div style={{ marginBottom: 4, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
+          Application info
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 18 }}>
+          Used to auto-fill job application forms when you use AI Apply.
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div>
+            <label style={labelStyle}>First name</label>
+            <input style={inputStyle} value={profile.firstName ?? ''} onChange={e => setField('firstName', e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Last name</label>
+            <input style={inputStyle} value={profile.lastName ?? ''} onChange={e => setField('lastName', e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Phone</label>
+            <input style={inputStyle} value={profile.phone ?? ''} onChange={e => setField('phone', e.target.value)} placeholder="+1 555 123 4567" />
+          </div>
+          <div>
+            <label style={labelStyle}>Work authorization</label>
+            <select style={inputStyle} value={profile.workAuthorization ?? ''} onChange={e => setField('workAuthorization', e.target.value)}>
+              {WORK_AUTH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>City</label>
+            <input style={inputStyle} value={profile.city ?? ''} onChange={e => setField('city', e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Country</label>
+            <input style={inputStyle} value={profile.country ?? ''} onChange={e => setField('country', e.target.value)} />
+          </div>
+        </div>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16, cursor: 'pointer' }}>
+          <input type="checkbox" checked={Boolean(profile.needsSponsorship)} onChange={e => setField('needsSponsorship', e.target.checked)} />
+          I will now or in the future require visa sponsorship
+        </label>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginBottom: 18 }}>
+          <div>
+            <label style={labelStyle}>LinkedIn URL</label>
+            <input style={inputStyle} value={profile.linkedinUrl ?? ''} onChange={e => setField('linkedinUrl', e.target.value)} placeholder="https://linkedin.com/in/…" />
+          </div>
+          <div>
+            <label style={labelStyle}>GitHub URL</label>
+            <input style={inputStyle} value={profile.githubUrl ?? ''} onChange={e => setField('githubUrl', e.target.value)} placeholder="https://github.com/…" />
+          </div>
+          <div>
+            <label style={labelStyle}>Portfolio / website</label>
+            <input style={inputStyle} value={profile.portfolioUrl ?? ''} onChange={e => setField('portfolioUrl', e.target.value)} placeholder="https://…" />
+          </div>
+        </div>
+
+        <button onClick={handleSaveProfile} disabled={savingProfile} style={{
+          fontSize: 13, fontWeight: 600, padding: '9px 20px', borderRadius: 9,
+          border: 'none', background: '#2563eb', color: '#fff', cursor: 'pointer',
+        }}>
+          {savingProfile ? 'Saving…' : 'Save application info'}
+        </button>
+      </div>
+
       <div style={{ marginTop: 16 }}>
         <button
           onClick={handleSignOut}

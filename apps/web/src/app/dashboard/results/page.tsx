@@ -19,7 +19,7 @@ function iconForResult(r: AgentResult): string {
 }
 
 function urlLabel(_r: AgentResult): string {
-  return 'Apply →'
+  return 'View job →'
 }
 
 function bodyForResult(r: AgentResult): string {

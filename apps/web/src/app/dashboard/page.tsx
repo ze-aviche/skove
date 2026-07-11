@@ -483,7 +483,7 @@ export default function DashboardPage() {
                                 background: 'var(--surface-3)',
                                 color: 'var(--text-secondary)',
                                 textDecoration: 'none',
-                              }}>Apply →</a>
+                              }}>View job →</a>
                             )}
                           </div>
                         </div>
