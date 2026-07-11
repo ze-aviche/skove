@@ -112,6 +112,61 @@
     return filled
   }
 
+  const PERSONAL_IDS = new Set(['first_name', 'last_name', 'email', 'phone'])
+
+  // Find question fields still empty after the known package was applied — these
+  // are the "arbitrary" questions we send back to the AI to answer live.
+  function collectUnfilledQuestions() {
+    const found = []
+    const seen = new Set()
+    for (const label of Array.from(document.querySelectorAll('label'))) {
+      const text = (label.textContent || '').replace(/\s+/g, ' ').trim()
+      // Heuristic: a real question is a longish label or ends with "?"
+      if (text.length < 8) continue
+      if (!(text.includes('?') || text.length > 25)) continue
+
+      let el = null
+      const forId = label.getAttribute('for')
+      if (forId) el = document.getElementById(forId)
+      if (!el) el = label.querySelector('textarea, input[type="text"], input:not([type])')
+      if (!el) continue
+      if (el.id && PERSONAL_IDS.has(el.id)) continue
+      if (!(el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && (el.type === 'text' || el.type === '')))) continue
+      if (el.value && el.value.trim()) continue
+      if (seen.has(el)) continue
+
+      seen.add(el)
+      found.push({ question: text.replace(/\*+$/, '').trim(), el })
+    }
+    return found
+  }
+
+  async function fillArbitraryQuestions(ctx) {
+    const pending = collectUnfilledQuestions()
+    if (pending.length === 0) return 0
+    try {
+      const res = await fetch(`${ctx.apiBase}/api/apply-fill/answer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: ctx.token, questions: pending.map(p => p.question) }),
+      })
+      if (!res.ok) return 0
+      const { answers } = await res.json()
+      let filled = 0
+      ;(answers || []).forEach((a, i) => {
+        const target = pending[i]
+        if (target && a && a.answer && !target.el.value) {
+          setNativeValue(target.el, a.answer)
+          filled++
+        }
+      })
+      return filled
+    } catch (e) {
+      console.warn('[Skove] dynamic answer failed', e)
+      return 0
+    }
+  }
+
   // ── Banner UI ────────────────────────────────────────────────────────────
 
   function banner(message, tone) {
@@ -130,7 +185,7 @@
 
   // ── Fill orchestration ───────────────────────────────────────────────────
 
-  function applyPackage(pkg) {
+  async function applyPackage(pkg, ctx) {
     const f = pkg.fields || {}
     // Greenhouse classic ids first, then label fallback
     fillById('first_name', f.firstName) || fillByLabel(['first name'], f.firstName)
@@ -143,7 +198,10 @@
     fillByLabel(['location', 'city'], f.location)
 
     const resumeOk = attachResume(pkg.resume)
-    const answersFilled = fillScreeningAnswers(pkg.screeningAnswers || [])
+    let answersFilled = fillScreeningAnswers(pkg.screeningAnswers || [])
+
+    banner('Skove filled your details — answering the remaining questions with AI…', 'info')
+    answersFilled += await fillArbitraryQuestions(ctx)
 
     banner(
       `Skove filled your details${resumeOk ? ' + resume' : ''}${answersFilled ? ` + ${answersFilled} answer(s)` : ''}. ` +
@@ -173,7 +231,7 @@
       const res = await fetch(`${apiBase}/api/apply-fill?token=${encodeURIComponent(token)}`)
       if (!res.ok) throw new Error(`API ${res.status}`)
       const pkg = await res.json()
-      whenFormReady(() => applyPackage(pkg))
+      whenFormReady(() => applyPackage(pkg, { token, apiBase }))
     } catch (e) {
       console.error('[Skove] fill failed', e)
       banner('Skove could not load your application data (token may have expired). Open it again from the dashboard.', 'error')

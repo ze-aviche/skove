@@ -11,8 +11,13 @@ so you only have to review and click **Submit**.
    token in the fragment (`…#skove=<token>`).
 3. This extension's content script reads the token, fetches your prepared package
    from `GET /api/apply-fill?token=…`, and fills the form (personal fields,
-   screening answers, and your stored resume file).
-4. A banner confirms what was filled. **You review and submit** — nothing is
+   pre-drafted answers, and your stored resume file).
+4. For any remaining questions on the form it couldn't fill from the package, it
+   reads the question labels and asks the AI to answer them live via
+   `POST /api/apply-fill/answer` (grounded in your profile + resume), then fills
+   those too. This is how arbitrary questions get answered without pre-listing
+   every possible question in your profile.
+5. A banner confirms what was filled. **You review and submit** — nothing is
    submitted automatically.
 
 ## Load it (developer mode)

@@ -13,6 +13,7 @@ const EMPTY_PROFILE: ProfileInput = {
   workAuthorization: '', needsSponsorship: false,
   linkedinUrl: '', githubUrl: '', portfolioUrl: '',
   gender: '', race: '', hispanicLatino: '', veteranStatus: '', disabilityStatus: '', aiUsage: '', locatedBayArea: '',
+  reasonForChange: '', compensationTarget: '', directReports: '',
 }
 
 const WORK_AUTH_OPTIONS = [
@@ -369,6 +370,24 @@ export default function ProfilePage() {
               onChange={e => setField('aiUsage', e.target.value)}
               placeholder="A sentence or two on how you use AI in your work."
             />
+          </div>
+          <div>
+            <label style={labelStyle}>Why are you looking for a change / why did you leave your last role?</label>
+            <textarea
+              style={{ ...inputStyle, resize: 'vertical', minHeight: 68, fontFamily: 'inherit' }}
+              rows={3}
+              value={profile.reasonForChange ?? ''}
+              onChange={e => setField('reasonForChange', e.target.value)}
+              placeholder="Your reason for seeking a new opportunity."
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Compensation target for this role</label>
+            <input style={inputStyle} value={profile.compensationTarget ?? ''} onChange={e => setField('compensationTarget', e.target.value)} placeholder="e.g. $160k–$180k base" />
+          </div>
+          <div>
+            <label style={labelStyle}>Do you have direct reports? If so, how many?</label>
+            <input style={inputStyle} value={profile.directReports ?? ''} onChange={e => setField('directReports', e.target.value)} placeholder="e.g. No / 3 direct reports" />
           </div>
         </div>
 

@@ -72,6 +72,9 @@ export interface ApplyProfile {
   disabilityStatus?: string | null
   aiUsage?: string | null
   locatedBayArea?: string | null
+  reasonForChange?: string | null
+  compensationTarget?: string | null
+  directReports?: string | null
 }
 
 export interface ApplyPackageResult {
@@ -150,6 +153,57 @@ Respond with ONLY valid JSON, no markdown:
     },
     screeningAnswers: Array.isArray(parsed.screeningAnswers) ? parsed.screeningAnswers : [],
     coverLetter: parsed.coverLetter ?? '',
+  }
+}
+
+// Answer arbitrary application questions read live off the ATS form. Grounded in
+// the applicant profile + resume; must not invent facts. Returns one answer per
+// question, in the same order, with an empty string when the answer is unknown.
+export async function answerScreeningQuestions(
+  profile: ApplyProfile,
+  resumeText: string,
+  job: { title: string; company: string; location: string; description?: string },
+  questions: string[]
+): Promise<Array<{ question: string; answer: string }>> {
+  if (questions.length === 0) return []
+
+  const message = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 2048,
+    messages: [{
+      role: 'user',
+      content: `You are filling out a job application on behalf of a candidate. Answer each question below using ONLY the candidate's profile and resume. Never invent employers, dates, numbers, credentials, or personal details. If the answer is not derivable, return an empty string for that question.
+
+Keep answers concise and appropriate to the question type: short phrases for factual fields (salary, years, yes/no, locations), 2-4 sentences for open-ended prompts (why this company, reason for change). Write in the first person as the candidate.
+
+CANDIDATE PROFILE:
+${JSON.stringify(profile)}
+
+RESUME (truncated):
+${resumeText.slice(0, 3000)}
+
+JOB:
+Title: ${job.title}
+Company: ${job.company}
+Location: ${job.location}
+${job.description ? `Description: ${job.description.slice(0, 800)}` : ''}
+
+QUESTIONS (answer every one, in order):
+${questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
+
+Respond with ONLY valid JSON, no markdown — an array of the same length and order as the questions:
+[ { "question": "<the question, verbatim>", "answer": "<answer, or empty string if unknown>" } ]`,
+    }],
+  })
+
+  const text = message.content[0].type === 'text' ? message.content[0].text : ''
+  const jsonMatch = text.match(/\[[\s\S]*\]/)
+  if (!jsonMatch) return questions.map(q => ({ question: q, answer: '' }))
+  try {
+    const parsed = JSON.parse(jsonMatch[0]) as Array<{ question: string; answer: string }>
+    return Array.isArray(parsed) ? parsed : questions.map(q => ({ question: q, answer: '' }))
+  } catch {
+    return questions.map(q => ({ question: q, answer: '' }))
   }
 }
 

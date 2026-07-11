@@ -48,6 +48,9 @@ const profileSchema = z.object({
   disabilityStatus: z.string().max(120).optional().nullable(),
   aiUsage: z.string().max(2000).optional().nullable(),
   locatedBayArea: z.string().max(20).optional().nullable(),
+  reasonForChange: z.string().max(2000).optional().nullable(),
+  compensationTarget: z.string().max(200).optional().nullable(),
+  directReports: z.string().max(200).optional().nullable(),
   eeoAnswers: z.record(z.string()).optional().nullable(),
 })
 

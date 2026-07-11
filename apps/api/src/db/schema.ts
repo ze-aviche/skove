@@ -48,6 +48,9 @@ export const profiles = pgTable('profiles', {
   // Common custom screening questions
   aiUsage: text('ai_usage'),                 // "How are you using AI today"
   locatedBayArea: text('located_bay_area'),  // 'yes' | 'no'
+  reasonForChange: text('reason_for_change'),   // why looking / why left previous company
+  compensationTarget: text('compensation_target'),
+  directReports: text('direct_reports'),        // "Do you have direct reports? If so, how many"
   eeoAnswers: jsonb('eeo_answers'),    // reserved for any additional ATS-specific EEO fields
   resumeFileUrl: text('resume_file_url'), // populated once object storage lands (Phase 3)
   createdAt: timestamp('created_at').defaultNow().notNull(),

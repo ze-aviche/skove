@@ -346,6 +346,9 @@ export type Profile = {
   disabilityStatus: string | null
   aiUsage: string | null
   locatedBayArea: string | null
+  reasonForChange: string | null
+  compensationTarget: string | null
+  directReports: string | null
   eeoAnswers: Record<string, string> | null
   resumeFileUrl: string | null
   createdAt: string
