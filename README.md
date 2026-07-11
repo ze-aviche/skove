@@ -1,12 +1,12 @@
 # Skove
 
-**Agents working for you, 24/7. Results waiting when you wake up.**
+**Your job search, working for you 24/7. New matches waiting when you wake up.**
 
-Skove is an open agent platform where users deploy autonomous agents that monitor, search, and act on their behalf — continuously, in the background.
+Skove is a job-search platform where applicants deploy an autonomous agent that finds, scores, and drafts applications for matching roles — continuously, in the background.
 
 ## What is Skove?
 
-Unlike a chatbot you have to ask, Skove agents work while you're offline. A flight watcher checks prices every 2 hours and alerts you when they drop. A job tracker monitors listings and drafts applications. A rental scout surfaces new listings the moment they appear. Users come back to a dashboard of results — not a blank prompt.
+Unlike a chatbot you have to ask, Skove works while you're offline. The job application tracker monitors listings matching your titles and locations, scores each role against your resume with AI, and drafts tailored resumes and cover letters. Users come back to a dashboard of matches — not a blank prompt.
 
 ## Monorepo Structure
 
@@ -17,8 +17,7 @@ skove/
 │   └── api/          # Node.js + Express backend + agent runner
 ├── packages/
 │   └── sdk/          # Agent SDK for 3rd party developers
-├── agents/
-│   └── flight-watcher/   # First built-in agent
+├── agents/               # Built-in agents
 ├── docs/             # Developer documentation
 ├── docker-compose.yml
 └── turbo.json
@@ -146,7 +145,7 @@ Skove is open to agent contributions. To submit an agent:
 - [x] Project scaffold
 - [ ] User auth + dashboard
 - [ ] Agent runner infrastructure
-- [ ] Flight watcher agent (v1)
+- [ ] Job application tracker agent (v1)
 - [ ] Agent marketplace
 - [ ] Developer SDK + docs
 - [ ] Stripe billing

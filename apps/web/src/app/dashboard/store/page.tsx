@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 const DeployButton = dynamicImport(() => import('@/components/DeployButton'), { ssr: false })
 
-const categories = ['All', 'Travel', 'Jobs', 'Real Estate', 'Finance', 'News']
+const categories = ['All', 'Jobs']
 
 type StoreAgent = AgentDefinition & {
   icon: string

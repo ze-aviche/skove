@@ -17,40 +17,13 @@ function postedLabel(iso: string): string {
 }
 
 const iconMap: Record<string, string> = {
-  'flight-watcher': '✈️',
   'job-application-tracker': '💼',
-  'rental-listing-monitor': '🏠',
-  'stock-price-alert': '📈',
-  'keyword-news-monitor': '📰',
 }
 
 function getInstanceLabel(agentId: string, config: Record<string, unknown>): string | null {
   switch (agentId) {
-    case 'flight-watcher':
-      if (config.origin && config.destination) return `${config.origin} → ${config.destination}`
-      break
     case 'job-application-tracker':
       if (config.jobTitle) return config.location ? `${config.jobTitle} · ${config.location}` : String(config.jobTitle)
-      break
-    case 'rental-listing-monitor':
-      if (config.city) {
-        const parts: string[] = [String(config.city)]
-        if (config.listingType) parts.push(String(config.listingType))
-        if (config.bedrooms && config.bedrooms !== 'Any') parts.push(`${config.bedrooms}BR`)
-        if (config.propertyType && config.propertyType !== 'Any') parts.push(String(config.propertyType))
-        const minP = config.minPrice ?? config.minRent
-        const maxP = config.maxPrice ?? config.maxRent
-        if (minP && maxP) parts.push(`$${minP}–$${maxP}`)
-        else if (maxP) parts.push(`max $${maxP}`)
-        else if (minP) parts.push(`from $${minP}`)
-        return parts.join(' · ')
-      }
-      break
-    case 'stock-price-alert':
-      if (config.symbol) return `${config.symbol}${config.targetPrice ? ` · below $${config.targetPrice}` : ''}`
-      break
-    case 'keyword-news-monitor':
-      if (config.keyword) return `"${config.keyword}"`
       break
   }
   return null

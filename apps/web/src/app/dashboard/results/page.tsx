@@ -5,8 +5,8 @@ import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
 import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, scoreResult, toggleFavourite, toggleApplied, AgentResult } from '@/lib/api'
 
-type Tab = 'All' | 'Unread' | 'Saved' | 'Applied' | 'Flights' | 'Jobs' | 'Rentals' | 'Stocks' | 'News'
-const TABS: Tab[] = ['All', 'Unread', 'Saved', 'Applied', 'Flights', 'Jobs', 'Rentals', 'Stocks', 'News']
+type Tab = 'All' | 'Unread' | 'Saved' | 'Applied'
+const TABS: Tab[] = ['All', 'Unread', 'Saved', 'Applied']
 
 function agentType(r: AgentResult): string {
   return typeof r.metadata === 'object' && r.metadata !== null && 'agentType' in r.metadata
@@ -15,21 +15,10 @@ function agentType(r: AgentResult): string {
 }
 
 function iconForResult(r: AgentResult): string {
-  const t = agentType(r)
-  if (t.includes('flight')) return '✈️'
-  if (t.includes('job')) return '💼'
-  if (t.includes('rental') || t.includes('real estate')) return '🏠'
-  if (t.includes('stock') || t.includes('finance')) return '📈'
-  if (t.includes('news') || t.includes('keyword')) return '📰'
-  return '◎'
+  return agentType(r).includes('job') ? '💼' : '◎'
 }
 
-function urlLabel(r: AgentResult): string {
-  const icon = iconForResult(r)
-  if (icon === '✈️') return 'View flights →'
-  if (icon === '🏠') return 'View listing →'
-  if (icon === '📈') return 'View stock →'
-  if (icon === '📰') return 'Read article →'
+function urlLabel(_r: AgentResult): string {
   return 'Apply →'
 }
 
@@ -44,12 +33,6 @@ function matchesTab(r: AgentResult, tab: Tab): boolean {
   if (tab === 'Unread') return !r.isRead
   if (tab === 'Saved') return r.isFavourite
   if (tab === 'Applied') return r.isApplied
-  const t = agentType(r)
-  if (tab === 'Flights') return t.includes('flight')
-  if (tab === 'Jobs') return t.includes('job')
-  if (tab === 'Rentals') return t.includes('rental')
-  if (tab === 'Stocks') return t.includes('stock')
-  if (tab === 'News') return t.includes('news') || t.includes('keyword')
   return false
 }
 

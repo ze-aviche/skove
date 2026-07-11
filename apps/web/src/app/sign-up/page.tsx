@@ -3,10 +3,10 @@ import Link from 'next/link'
 import { clerkLight } from '@/lib/auth-appearance'
 
 const features = [
-  { icon: '✈️', text: 'Track cheap flights and get alerted instantly' },
-  { icon: '💼', text: 'Find jobs that match your resume with AI scoring' },
-  { icon: '🏠', text: 'Monitor rental listings before they disappear' },
-  { icon: '📈', text: 'Watch stocks and prices around the clock' },
+  { icon: '🔍', text: 'Find jobs that match your titles and locations automatically' },
+  { icon: '💼', text: 'Score every role against your resume with AI' },
+  { icon: '📝', text: 'Get tailored resumes and cover letters drafted for you' },
+  { icon: '🔔', text: 'Catch new openings the moment they go live' },
 ]
 
 export default function SignUpPage() {

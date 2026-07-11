@@ -1,4 +1,4 @@
-import { AgentRunResult } from './flight-watcher.js'
+import { AgentRunResult } from './types.js'
 import { RunnerContext } from './index.js'
 import { db } from '../../db/index.js'
 import { agentResults } from '../../db/schema.js'

@@ -37,7 +37,7 @@ export default function TermsPage() {
         </Section>
 
         <Section title="3. Description of Service">
-          Skove provides automated monitoring agents that search the web and external data sources on your behalf and deliver results to your dashboard and email. Agents include flight price watchers, job trackers, real estate monitors, stock alerts, and news monitors.
+          Skove provides automated job-search agents that search the web and external data sources on your behalf and deliver matching job listings to your dashboard and email. Agents find roles matching your criteria, score them against your resume, and draft tailored applications.
         </Section>
 
         <Section title="4. Eligibility">

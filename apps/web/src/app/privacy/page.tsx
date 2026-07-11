@@ -37,13 +37,13 @@ export default function PrivacyPage() {
           When you create an account we collect your email address and, optionally, your name via our authentication provider (Clerk).
 
           <strong style={{ display: 'block', marginTop: 16, marginBottom: 8, color: '#111827' }}>Agent configuration data</strong>
-          We store the configuration you provide when deploying agents — including search criteria such as job titles, locations, airport codes, stock ticker symbols, city names, and price ranges. This data is used solely to operate your agents.
+          We store the configuration you provide when deploying agents — including search criteria such as job titles, locations, keywords, and specializations. This data is used solely to operate your agents.
 
           <strong style={{ display: 'block', marginTop: 16, marginBottom: 8, color: '#111827' }}>Resume and documents</strong>
           If you use the Job Tracker agent, you may optionally upload a resume in PDF format. The extracted text is stored and used to score job matches and generate tailored documents. You can delete your resume at any time from your Profile page.
 
           <strong style={{ display: 'block', marginTop: 16, marginBottom: 8, color: '#111827' }}>Agent results</strong>
-          Search results retrieved by your agents (e.g. flight prices, job listings, property listings) are stored in your account so you can review them in the dashboard.
+          Job listings retrieved by your agents are stored in your account so you can review them in the dashboard.
 
           <strong style={{ display: 'block', marginTop: 16, marginBottom: 8, color: '#111827' }}>Usage data</strong>
           We collect standard server logs including IP addresses, browser type, pages visited, and timestamps. This data helps us diagnose issues and improve the Service.
