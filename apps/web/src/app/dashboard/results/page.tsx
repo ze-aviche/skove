@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
-import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, scoreResult, toggleFavourite, toggleApplied, buildApplyPackage, saveScreeningAnswers, ApplyPackageResponse, AgentResult } from '@/lib/api'
+import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, scoreResult, toggleFavourite, toggleApplied, buildApplyPackage, saveApplyPackageEdits, ApplyPackageResponse, AgentResult } from '@/lib/api'
 
 type Tab = 'All' | 'Unread' | 'Saved' | 'Applied'
 const TABS: Tab[] = ['All', 'Unread', 'Saved', 'Applied']
@@ -581,10 +581,12 @@ export default function ResultsPage() {
 function ApplyReviewModal({ data, onClose }: { data: ApplyPackageResponse; onClose: () => void }) {
   const { showToast } = useToast()
   const auth = useAuth()
-  const { fields, coverLetter } = data.package
+  const { fields } = data.package
 
   const [answers, setAnswers] = useState(data.package.screeningAnswers)
+  const [coverLetter, setCoverLetter] = useState(data.package.coverLetter)
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
+  const [editingCover, setEditingCover] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -593,23 +595,24 @@ function ApplyReviewModal({ data, onClose }: { data: ApplyPackageResponse; onClo
     setDirty(true)
   }
 
-  const copyAnswer = async (text: string) => {
+  const copyText = async (text: string, label: string) => {
     try {
       await navigator.clipboard.writeText(text)
-      showToast({ message: 'Answer copied', variant: 'success' })
+      showToast({ message: `${label} copied`, variant: 'success' })
     } catch {
       showToast({ message: 'Copy failed', variant: 'error' })
     }
   }
 
-  const saveAnswers = async () => {
+  const saveEdits = async () => {
     setSaving(true)
     try {
       const token = await auth.getToken()
-      await saveScreeningAnswers(data.applicationId, answers, token)
+      await saveApplyPackageEdits(data.applicationId, { screeningAnswers: answers, coverLetter }, token)
       setDirty(false)
       setEditingIdx(null)
-      showToast({ message: 'Answers saved', variant: 'success' })
+      setEditingCover(false)
+      showToast({ message: 'Changes saved', variant: 'success' })
     } catch (err) {
       showToast({ message: err instanceof Error ? err.message : 'Failed to save', variant: 'error' })
     } finally {
@@ -689,7 +692,7 @@ function ApplyReviewModal({ data, onClose }: { data: ApplyPackageResponse; onClo
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Screening answers</div>
               {dirty && (
-                <button onClick={saveAnswers} disabled={saving} style={{
+                <button onClick={saveEdits} disabled={saving} style={{
                   fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 7,
                   border: 'none', background: '#2563eb', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer',
                 }}>{saving ? 'Saving…' : 'Save changes'}</button>
@@ -709,7 +712,7 @@ function ApplyReviewModal({ data, onClose }: { data: ApplyPackageResponse; onClo
                           style={{ fontSize: 11, padding: '2px 7px', borderRadius: 6, border: '1px solid var(--border)', background: isEditing ? 'var(--brand-dim)' : 'var(--surface-3)', color: isEditing ? 'var(--brand)' : 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
                         >{isEditing ? '✓ Done' : '✎ Edit'}</button>
                         <button
-                          onClick={() => copyAnswer(a.answer)}
+                          onClick={() => copyText(a.answer, 'Answer')}
                           title="Copy answer"
                           style={{ fontSize: 11, padding: '2px 7px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-3)', color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
                         >⧉ Copy</button>
@@ -739,16 +742,51 @@ function ApplyReviewModal({ data, onClose }: { data: ApplyPackageResponse; onClo
           </>
         )}
 
-        {coverLetter && (
+        {(coverLetter || editingCover) && (
           <>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Cover letter</div>
-            <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7, whiteSpace: 'pre-wrap', marginBottom: 20 }}>
-              {coverLetter}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Cover letter</div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  onClick={() => setEditingCover(v => !v)}
+                  title={editingCover ? 'Done editing' : 'Edit cover letter'}
+                  style={{ fontSize: 11, padding: '2px 7px', borderRadius: 6, border: '1px solid var(--border)', background: editingCover ? 'var(--brand-dim)' : 'var(--surface-3)', color: editingCover ? 'var(--brand)' : 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >{editingCover ? '✓ Done' : '✎ Edit'}</button>
+                <button
+                  onClick={() => copyText(coverLetter, 'Cover letter')}
+                  title="Copy cover letter"
+                  style={{ fontSize: 11, padding: '2px 7px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-3)', color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >⧉ Copy</button>
+              </div>
             </div>
+            {editingCover ? (
+              <textarea
+                value={coverLetter}
+                onChange={e => { setCoverLetter(e.target.value); setDirty(true) }}
+                rows={Math.max(6, Math.ceil((coverLetter.length || 1) / 70))}
+                autoFocus
+                style={{
+                  width: '100%', fontSize: 12, lineHeight: 1.7, padding: '10px 12px',
+                  borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface-1)',
+                  color: 'var(--text-primary)', outline: 'none', resize: 'vertical', fontFamily: 'inherit', marginBottom: 20,
+                }}
+              />
+            ) : (
+              <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7, whiteSpace: 'pre-wrap', marginBottom: 20 }}>
+                {coverLetter}
+              </div>
+            )}
           </>
         )}
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {dirty && (
+            <button onClick={saveEdits} disabled={saving} style={{
+              fontSize: 13, fontWeight: 600, padding: '9px 16px', borderRadius: 9,
+              border: '1px solid rgba(37,99,235,0.35)', background: 'var(--brand-dim)',
+              color: '#2563eb', cursor: saving ? 'not-allowed' : 'pointer',
+            }}>{saving ? 'Saving…' : 'Save changes'}</button>
+          )}
           <button onClick={copyAll} style={{
             fontSize: 13, fontWeight: 500, padding: '9px 16px', borderRadius: 9,
             border: '1px solid var(--border)', background: 'var(--surface-3)',

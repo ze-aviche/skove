@@ -381,14 +381,14 @@ export function buildApplyPackage(resultId: string, token?: string): Promise<App
   })
 }
 
-export function saveScreeningAnswers(
+export function saveApplyPackageEdits(
   applicationId: string,
-  screeningAnswers: Array<{ question: string; answer: string }>,
+  edits: { screeningAnswers?: Array<{ question: string; answer: string }>; coverLetter?: string },
   token?: string,
-): Promise<{ applicationId: string; screeningAnswers: Array<{ question: string; answer: string }> }> {
+): Promise<{ applicationId: string; payload: ApplyPackage }> {
   return fetchJson(`/api/results/applications/${applicationId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ screeningAnswers }),
+    body: JSON.stringify(edits),
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
 }
