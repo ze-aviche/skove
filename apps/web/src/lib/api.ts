@@ -381,6 +381,13 @@ export function buildApplyPackage(resultId: string, token?: string): Promise<App
   })
 }
 
+export function getFillToken(applicationId: string, token?: string): Promise<{ token: string }> {
+  return fetchJson(`/api/results/applications/${applicationId}/fill-token`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
 export function saveApplyPackageEdits(
   applicationId: string,
   edits: { screeningAnswers?: Array<{ question: string; answer: string }>; coverLetter?: string },

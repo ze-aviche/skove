@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Skove AI Apply",
+  "version": "0.1.0",
+  "description": "Auto-fills ATS job application forms from your Skove profile, ready for you to review and submit.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://boards.greenhouse.io/*",
+    "https://job-boards.greenhouse.io/*",
+    "https://*.greenhouse.io/*",
+    "https://api-production-1bae.up.railway.app/*"
+  ],
+  "action": {
+    "default_title": "Skove AI Apply",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://boards.greenhouse.io/*",
+        "https://job-boards.greenhouse.io/*",
+        "https://*.greenhouse.io/*"
+      ],
+      "js": ["content/greenhouse.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

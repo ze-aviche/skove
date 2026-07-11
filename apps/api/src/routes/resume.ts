@@ -29,9 +29,15 @@ resumeRouter.post('/', requireAuth, upload.single('resume'), async (req: Request
     const resumeText = parsed.text.trim()
     if (!resumeText) return res.status(400).json({ error: 'Could not extract text from PDF — try a text-based PDF' })
 
+    const fileFields = {
+      resumeFile: req.file.buffer,
+      resumeFileName: req.file.originalname || 'resume.pdf',
+      resumeMimeType: req.file.mimetype || 'application/pdf',
+    }
+
     await db.insert(users)
-      .values({ id: req.userId!, email: req.userId!, resumeText })
-      .onConflictDoUpdate({ target: users.id, set: { resumeText } })
+      .values({ id: req.userId!, email: req.userId!, resumeText, ...fileFields })
+      .onConflictDoUpdate({ target: users.id, set: { resumeText, ...fileFields } })
 
     res.json({ success: true, wordCount: resumeText.split(/\s+/).length, pages: parsed.numpages })
   } catch (err) {

@@ -9,6 +9,7 @@ import { resultsRouter } from './routes/results.js'
 import { webhooksRouter } from './routes/webhooks.js'
 import { resumeRouter } from './routes/resume.js'
 import { profileRouter } from './routes/profile.js'
+import { applyFillRouter } from './routes/apply-fill.js'
 import { billingRouter } from './routes/billing.js'
 import { adminRouter } from './routes/admin.js'
 import { downloadRouter } from './routes/download.js'
@@ -26,6 +27,10 @@ const allowedOrigins = [
   appUrl.replace('https://', 'https://www.'),
   'http://localhost:3000',
 ].filter(Boolean) as string[]
+// Token-authenticated extension endpoint — manages its own permissive CORS,
+// so mount it before the whitelist CORS middleware below.
+app.use('/api/apply-fill', applyFillRouter)
+
 app.use(cors({ origin: allowedOrigins, credentials: true }))
 
 // Stripe webhook needs raw body — must come before express.json()

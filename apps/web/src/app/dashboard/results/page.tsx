@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
-import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, scoreResult, toggleFavourite, toggleApplied, buildApplyPackage, saveApplyPackageEdits, ApplyPackageResponse, AgentResult } from '@/lib/api'
+import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, scoreResult, toggleFavourite, toggleApplied, buildApplyPackage, saveApplyPackageEdits, getFillToken, ApplyPackageResponse, AgentResult } from '@/lib/api'
 
 type Tab = 'All' | 'Unread' | 'Saved' | 'Applied'
 const TABS: Tab[] = ['All', 'Unread', 'Saved', 'Applied']
@@ -604,11 +604,15 @@ function ApplyReviewModal({ data, onClose }: { data: ApplyPackageResponse; onClo
     }
   }
 
+  const persist = async () => {
+    const token = await auth.getToken()
+    await saveApplyPackageEdits(data.applicationId, { screeningAnswers: answers, coverLetter }, token)
+  }
+
   const saveEdits = async () => {
     setSaving(true)
     try {
-      const token = await auth.getToken()
-      await saveApplyPackageEdits(data.applicationId, { screeningAnswers: answers, coverLetter }, token)
+      await persist()
       setDirty(false)
       setEditingIdx(null)
       setEditingCover(false)
@@ -617,6 +621,24 @@ function ApplyReviewModal({ data, onClose }: { data: ApplyPackageResponse; onClo
       showToast({ message: err instanceof Error ? err.message : 'Failed to save', variant: 'error' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const [prefilling, setPrefilling] = useState(false)
+  const handlePrefill = async () => {
+    if (!data.applyUrl) return
+    setPrefilling(true)
+    try {
+      const token = await auth.getToken()
+      // Persist any pending edits so the extension fetches the latest wording
+      if (dirty) { await persist(); setDirty(false); setEditingIdx(null); setEditingCover(false) }
+      const { token: fillToken } = await getFillToken(data.applicationId, token)
+      const sep = data.applyUrl.includes('#') ? '&' : '#'
+      window.open(`${data.applyUrl}${sep}skove=${encodeURIComponent(fillToken)}`, '_blank', 'noopener')
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'Failed to prepare autofill', variant: 'error' })
+    } finally {
+      setPrefilling(false)
     }
   }
 
@@ -793,12 +815,25 @@ function ApplyReviewModal({ data, onClose }: { data: ApplyPackageResponse; onClo
             color: 'var(--text-secondary)', cursor: 'pointer',
           }}>Copy all</button>
           {data.applyUrl && (
-            <a href={data.applyUrl} target="_blank" rel="noreferrer" style={{
-              fontSize: 13, fontWeight: 600, padding: '9px 18px', borderRadius: 9,
-              border: 'none', background: '#2563eb', color: '#fff', textDecoration: 'none',
-            }}>Open application form →</a>
+            <>
+              <button onClick={handlePrefill} disabled={prefilling} style={{
+                fontSize: 13, fontWeight: 600, padding: '9px 18px', borderRadius: 9,
+                border: 'none', background: '#2563eb', color: '#fff',
+                cursor: prefilling ? 'not-allowed' : 'pointer',
+              }}>{prefilling ? 'Preparing…' : '⚡ Pre-fill application form →'}</button>
+              <a href={data.applyUrl} target="_blank" rel="noreferrer" style={{
+                fontSize: 13, fontWeight: 500, padding: '9px 16px', borderRadius: 9,
+                border: '1px solid var(--border)', background: 'var(--surface-3)',
+                color: 'var(--text-secondary)', textDecoration: 'none',
+              }}>Open form only</a>
+            </>
           )}
         </div>
+        {data.applyUrl && (
+          <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 10, lineHeight: 1.5 }}>
+            Pre-fill needs the free Skove browser extension and works on Greenhouse forms today. It opens the form with your details, resume, and answers filled in — review everything, then submit yourself.
+          </p>
+        )}
       </div>
     </div>
   )

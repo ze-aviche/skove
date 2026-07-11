@@ -6,6 +6,7 @@ import { eq, desc, and, inArray } from 'drizzle-orm'
 import { requireAuth } from '../lib/auth.js'
 import { log } from '../lib/logger.js'
 import { scoreJobMatch, tailorResume, buildApplyPackage } from '../lib/claude.js'
+import { signFillToken } from '../lib/fill-token.js'
 
 function inferAtsType(url?: string | null): string {
   const u = (url ?? '').toLowerCase()
@@ -220,6 +221,22 @@ resultsRouter.patch('/applications/:applicationId', requireAuth, async (req, res
   } catch (err) {
     log.error('api', 'PATCH /api/results/applications/:id failed', err, { applicationId: req.params.applicationId, userId: req.userId })
     res.status(500).json({ error: 'Failed to save answers' })
+  }
+})
+
+// POST /api/results/applications/:applicationId/fill-token — mint a short-lived
+// token the browser extension uses to fetch this package for autofill
+resultsRouter.post('/applications/:applicationId/fill-token', requireAuth, async (req, res) => {
+  try {
+    const [application] = await db.select().from(applications).where(eq(applications.id, req.params.applicationId))
+    if (!application || application.userId !== req.userId) {
+      return res.status(404).json({ error: 'Application not found' })
+    }
+    const token = signFillToken(application.id, req.userId!)
+    res.json({ token })
+  } catch (err) {
+    log.error('api', 'fill-token mint failed', err, { applicationId: req.params.applicationId, userId: req.userId })
+    res.status(500).json({ error: 'Failed to create fill token' })
   }
 })
 

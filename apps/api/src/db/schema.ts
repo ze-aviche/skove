@@ -1,10 +1,18 @@
-import { pgTable, text, timestamp, jsonb, boolean, uuid, integer } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, jsonb, boolean, uuid, integer, customType } from 'drizzle-orm/pg-core'
+
+// Raw binary column (Postgres bytea) — postgres.js maps this to/from Buffer
+const bytea = customType<{ data: Buffer; default: false }>({
+  dataType() { return 'bytea' },
+})
 
 // Users synced from Clerk
 export const users = pgTable('users', {
   id: text('id').primaryKey(), // Clerk user ID
   email: text('email').notNull(),
   resumeText: text('resume_text'),
+  resumeFile: bytea('resume_file'),          // raw PDF bytes, for attaching to ATS forms
+  resumeFileName: text('resume_file_name'),
+  resumeMimeType: text('resume_mime_type'),
   plan: text('plan').default('free').notNull(), // 'free' | 'pro'
   stripeCustomerId: text('stripe_customer_id'),
   stripeSubscriptionId: text('stripe_subscription_id'),
