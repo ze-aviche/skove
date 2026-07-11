@@ -18,12 +18,6 @@ importers:
         specifier: ^5.3.3
         version: 5.9.3
 
-  agents/flight-watcher:
-    dependencies:
-      '@skove/sdk':
-        specifier: workspace:*
-        version: link:../../packages/sdk
-
   apps/api:
     dependencies:
       '@anthropic-ai/sdk':
@@ -154,6 +148,8 @@ importers:
       typescript:
         specifier: ^5.3.3
         version: 5.9.3
+
+  packages/scrapers: {}
 
   packages/sdk:
     devDependencies:
