@@ -73,6 +73,46 @@
     return false
   }
 
+  // ── <select> dropdown helpers ─────────────────────────────────────────────
+
+  function selectIsEmpty(select) {
+    return !select.value || select.value === ''
+  }
+
+  // Pick the option that best matches `desired` and select it
+  function selectOption(select, desired) {
+    if (!desired) return false
+    const want = String(desired).trim().toLowerCase()
+    if (!want) return false
+    const opts = Array.from(select.options)
+
+    const norm = s => (s || '').trim().toLowerCase()
+    const match =
+      // exact value or visible-text match
+      opts.find(o => norm(o.value) === want || norm(o.textContent) === want) ||
+      // option text contains the desired value
+      opts.find(o => want.length > 1 && norm(o.textContent).includes(want)) ||
+      // desired value contains the option text (e.g. long EEO strings)
+      opts.find(o => norm(o.textContent).length > 2 && want.includes(norm(o.textContent))) ||
+      // yes/no leading match
+      ((want === 'yes' || want === 'no') ? opts.find(o => norm(o.textContent).startsWith(want)) : null)
+
+    if (!match) return false
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+    if (setter) setter.call(select, match.value)
+    else select.value = match.value
+    select.dispatchEvent(new Event('input', { bubbles: true }))
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+    return true
+  }
+
+  function fillSelectByLabel(needles, desired) {
+    if (!desired) return false
+    const el = findFieldByLabel(needles)
+    if (el && el.tagName === 'SELECT') return selectOption(el, desired)
+    return false
+  }
+
   // Attach a base64 file to the resume file input via a synthetic DataTransfer
   function attachResume(resume) {
     if (!resume || !resume.base64) return false
@@ -128,15 +168,23 @@
       let el = null
       const forId = label.getAttribute('for')
       if (forId) el = document.getElementById(forId)
-      if (!el) el = label.querySelector('textarea, input[type="text"], input:not([type])')
+      if (!el) el = label.querySelector('textarea, select, input[type="text"], input:not([type])')
       if (!el) continue
       if (el.id && PERSONAL_IDS.has(el.id)) continue
-      if (!(el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && (el.type === 'text' || el.type === '')))) continue
-      if (el.value && el.value.trim()) continue
+
+      const isText = el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && (el.type === 'text' || el.type === ''))
+      const isSelect = el.tagName === 'SELECT'
+      if (!isText && !isSelect) continue
+      if (isText && el.value && el.value.trim()) continue
+      if (isSelect && !selectIsEmpty(el)) continue
       if (seen.has(el)) continue
 
+      const options = el.tagName === 'SELECT'
+        ? Array.from(el.options).map(o => o.textContent.trim()).filter(t => t && !/^(select|choose|--)/i.test(t))
+        : null
+
       seen.add(el)
-      found.push({ question: text.replace(/\*+$/, '').trim(), el })
+      found.push({ question: text.replace(/\*+$/, '').trim(), el, options })
     }
     return found
   }
@@ -145,17 +193,26 @@
     const pending = collectUnfilledQuestions()
     if (pending.length === 0) return 0
     try {
+      // For dropdowns, tell the AI the exact allowed choices so it returns one
+      const questions = pending.map(p =>
+        p.options && p.options.length
+          ? `${p.question} (choose exactly one of: ${p.options.join(' | ')})`
+          : p.question
+      )
       const res = await fetch(`${ctx.apiBase}/api/apply-fill/answer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: ctx.token, questions: pending.map(p => p.question) }),
+        body: JSON.stringify({ token: ctx.token, questions }),
       })
       if (!res.ok) return 0
       const { answers } = await res.json()
       let filled = 0
       ;(answers || []).forEach((a, i) => {
         const target = pending[i]
-        if (target && a && a.answer && !target.el.value) {
+        if (!target || !a || !a.answer) return
+        if (target.el.tagName === 'SELECT') {
+          if (selectOption(target.el, a.answer)) filled++
+        } else if (!target.el.value) {
           setNativeValue(target.el, a.answer)
           filled++
         }
@@ -196,6 +253,18 @@
     fillByLabel(['github'], f.githubUrl)
     fillByLabel(['website', 'portfolio'], f.portfolioUrl)
     fillByLabel(['location', 'city'], f.location)
+
+    // Known EEO / demographic dropdowns from the profile
+    const d = pkg.demographics || {}
+    const sponsorAns = d.needsSponsorship === true ? 'yes' : d.needsSponsorship === false ? 'no' : ''
+    fillSelectByLabel(['gender'], d.gender)
+    fillSelectByLabel(['race'], d.race)
+    fillSelectByLabel(['hispanic', 'latino'], d.hispanicLatino)
+    fillSelectByLabel(['veteran'], d.veteranStatus)
+    fillSelectByLabel(['disability'], d.disabilityStatus)
+    fillSelectByLabel(['authorized', 'work authorization', 'legally authorized'], d.workAuthorization)
+    fillSelectByLabel(['sponsorship'], sponsorAns)
+    fillSelectByLabel(['bay area'], d.locatedBayArea)
 
     const resumeOk = attachResume(pkg.resume)
     let answersFilled = fillScreeningAnswers(pkg.screeningAnswers || [])

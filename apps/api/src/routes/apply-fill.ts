@@ -53,6 +53,7 @@ applyFillRouter.get('/', async (req, res) => {
     const [user] = await db
       .select({ resumeFile: users.resumeFile, resumeFileName: users.resumeFileName, resumeMimeType: users.resumeMimeType })
       .from(users).where(eq(users.id, payload.userId))
+    const [profileRow] = await db.select().from(profiles).where(eq(profiles.userId, payload.userId))
 
     const pkg = (application.payload ?? {}) as Record<string, any>
     const resume = user?.resumeFile
@@ -63,9 +64,23 @@ applyFillRouter.get('/', async (req, res) => {
         }
       : null
 
+    // Demographic / EEO + dropdown-friendly values for the extension to match
+    // against <select> options and radio choices.
+    const demographics = {
+      gender: profileRow?.gender ?? '',
+      race: profileRow?.race ?? '',
+      hispanicLatino: profileRow?.hispanicLatino ?? '',
+      veteranStatus: profileRow?.veteranStatus ?? '',
+      disabilityStatus: profileRow?.disabilityStatus ?? '',
+      workAuthorization: profileRow?.workAuthorization ?? '',
+      needsSponsorship: profileRow?.needsSponsorship ?? null,
+      locatedBayArea: profileRow?.locatedBayArea ?? '',
+    }
+
     res.json({
       atsType: application.atsType,
       fields: pkg.fields ?? {},
+      demographics,
       screeningAnswers: pkg.screeningAnswers ?? [],
       coverLetter: pkg.coverLetter ?? '',
       resume,
