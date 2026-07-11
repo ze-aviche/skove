@@ -144,7 +144,7 @@ Respond with ONLY valid JSON, no markdown:
       lastName: profile.lastName ?? '',
       email: profile.email ?? '',
       phone: profile.phone ?? '',
-      location: [profile.city, profile.country].filter(Boolean).join(', '),
+      location: profile.currentLocation || [profile.city, profile.country].filter(Boolean).join(', '),
       linkedinUrl: profile.linkedinUrl ?? '',
       githubUrl: profile.githubUrl ?? '',
       portfolioUrl: profile.portfolioUrl ?? '',

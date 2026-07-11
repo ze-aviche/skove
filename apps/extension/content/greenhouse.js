@@ -113,18 +113,72 @@
     return false
   }
 
-  // Attach a base64 file to the resume file input via a synthetic DataTransfer
-  function attachResume(resume) {
-    if (!resume || !resume.base64) return false
-    const input =
-      document.getElementById('resume') ||
-      document.querySelector('input[type="file"][name*="resume" i]') ||
-      document.querySelector('input[type="file"]')
-    if (!input) return false
+  // ── Radio-group helpers ───────────────────────────────────────────────────
 
+  // Radios for one question share a `name`. Find the group associated with a
+  // question label, and select the radio whose own label text matches `desired`.
+  function radioGroupForQuestion(label) {
+    // Radios usually sit in the same fieldset/container as the question text
+    let scope = label.closest('fieldset') || label.parentElement
+    for (let hop = 0; hop < 3 && scope; hop++) {
+      const radios = scope.querySelectorAll('input[type="radio"]')
+      if (radios.length) return Array.from(radios)
+      scope = scope.parentElement
+    }
+    return []
+  }
+
+  function radioLabelText(radio) {
+    if (radio.id) {
+      const lbl = document.querySelector(`label[for="${CSS.escape(radio.id)}"]`)
+      if (lbl) return lbl.textContent.trim()
+    }
+    const wrap = radio.closest('label')
+    if (wrap) return wrap.textContent.trim()
+    const sib = radio.nextElementSibling
+    return sib ? sib.textContent.trim() : (radio.value || '')
+  }
+
+  function selectRadio(radios, desired) {
+    if (!desired || !radios.length) return false
+    const want = String(desired).trim().toLowerCase()
+    const norm = s => (s || '').trim().toLowerCase()
+    const match =
+      radios.find(r => norm(radioLabelText(r)) === want || norm(r.value) === want) ||
+      radios.find(r => want.length > 1 && norm(radioLabelText(r)).includes(want)) ||
+      ((want === 'yes' || want === 'no') ? radios.find(r => norm(radioLabelText(r)).startsWith(want)) : null)
+    if (!match) return false
+    match.checked = true
+    match.dispatchEvent(new Event('input', { bubbles: true }))
+    match.dispatchEvent(new Event('change', { bubbles: true }))
+    return true
+  }
+
+  function labelMatching(needles) {
+    return Array.from(document.querySelectorAll('label, legend')).find(l => {
+      const t = (l.textContent || '').toLowerCase()
+      return needles.some(n => t.includes(n))
+    })
+  }
+
+  // Fill a question that is either a <select> or a radio group, by label
+  function fillChoiceByLabel(needles, desired) {
+    if (!desired) return false
+    if (fillSelectByLabel(needles, desired)) return true
+    const q = labelMatching(needles)
+    if (q) {
+      const radios = radioGroupForQuestion(q)
+      if (radios.length && selectRadio(radios, desired)) return true
+    }
+    return false
+  }
+
+  // Attach a base64 file to a file input via a synthetic DataTransfer
+  function attachFile(input, fileData, fallbackName) {
+    if (!input || !fileData || !fileData.base64) return false
     try {
-      const bytes = Uint8Array.from(atob(resume.base64), c => c.charCodeAt(0))
-      const file = new File([bytes], resume.filename || 'resume.pdf', { type: resume.mimeType || 'application/pdf' })
+      const bytes = Uint8Array.from(atob(fileData.base64), c => c.charCodeAt(0))
+      const file = new File([bytes], fileData.filename || fallbackName, { type: fileData.mimeType || 'application/pdf' })
       const dt = new DataTransfer()
       dt.items.add(file)
       input.files = dt.files
@@ -132,9 +186,50 @@
       input.dispatchEvent(new Event('change', { bubbles: true }))
       return true
     } catch (e) {
-      console.warn('[Skove] resume attach failed', e)
+      console.warn('[Skove] file attach failed', e)
       return false
     }
+  }
+
+  // Find a file input near a label matching any needle
+  function fileInputByLabel(needles) {
+    const el = findFieldByLabel(needles)
+    if (el && el.tagName === 'INPUT' && el.type === 'file') return el
+    // fall back to a file input whose id/name contains a needle
+    for (const inp of Array.from(document.querySelectorAll('input[type="file"]'))) {
+      const hay = `${inp.id} ${inp.name}`.toLowerCase()
+      if (needles.some(n => hay.includes(n.replace(/\s+/g, '_')) || hay.includes(n.replace(/\s+/g, '')))) return inp
+    }
+    return null
+  }
+
+  function attachResume(resume) {
+    const input =
+      document.getElementById('resume') ||
+      document.querySelector('input[type="file"][name*="resume" i]') ||
+      fileInputByLabel(['resume', 'cv']) ||
+      document.querySelector('input[type="file"]')
+    return attachFile(input, resume, 'resume.pdf')
+  }
+
+  // Fill the cover letter: paste text into a cover-letter textarea if present,
+  // and attach the rendered PDF to a cover-letter file input if present.
+  function fillCoverLetter(pkg) {
+    let done = false
+    if (pkg.coverLetter) {
+      const ta = findFieldByLabel(['cover letter'])
+      if (ta && ta.tagName === 'TEXTAREA' && !ta.value) { setNativeValue(ta, pkg.coverLetter); done = true }
+    }
+    if (pkg.coverLetterFile) {
+      const input =
+        document.getElementById('cover_letter') ||
+        fileInputByLabel(['cover letter'])
+      // avoid grabbing the resume input by accident
+      if (input && input !== document.getElementById('resume')) {
+        if (attachFile(input, pkg.coverLetterFile, 'cover_letter.pdf')) done = true
+      }
+    }
+    return done
   }
 
   // Best-effort match of screening answers to custom-question textareas/inputs
@@ -186,7 +281,44 @@
       seen.add(el)
       found.push({ question: text.replace(/\*+$/, '').trim(), el, options })
     }
-    return found
+    return found.concat(collectRadioQuestions())
+  }
+
+  function radioQuestionText(radios) {
+    const fs = radios[0].closest('fieldset')
+    if (fs) { const lg = fs.querySelector('legend'); if (lg && lg.textContent.trim()) return lg.textContent.trim() }
+    const alb = radios[0].getAttribute('aria-labelledby')
+    if (alb) { const el = document.getElementById(alb); if (el && el.textContent.trim()) return el.textContent.trim() }
+    // Walk up looking for a question-like text that isn't one of the option labels
+    const optionTexts = new Set(radios.map(r => (radioLabelText(r) || '').trim()))
+    let node = radios[0].closest('div, li, fieldset, section')
+    for (let i = 0; i < 4 && node; i++) {
+      const cand = Array.from(node.querySelectorAll('label, legend, span, div, p'))
+        .map(e => e.textContent.replace(/\s+/g, ' ').trim())
+        .find(t => (t.includes('?') || t.length > 25) && t.length < 300 && !optionTexts.has(t))
+      if (cand) return cand
+      node = node.parentElement
+    }
+    return ''
+  }
+
+  // Unanswered radio-group questions (grouped by name), with their option labels
+  function collectRadioQuestions() {
+    const groups = {}
+    document.querySelectorAll('input[type="radio"]').forEach(r => {
+      const key = r.name || ''
+      if (!key) return
+      ;(groups[key] = groups[key] || []).push(r)
+    })
+    const out = []
+    for (const radios of Object.values(groups)) {
+      if (radios.some(r => r.checked)) continue
+      const q = radioQuestionText(radios)
+      if (!q || q.length < 8) continue
+      const options = radios.map(radioLabelText).filter(Boolean)
+      out.push({ question: q.replace(/\*+$/, '').trim(), radios, options })
+    }
+    return out
   }
 
   async function fillArbitraryQuestions(ctx) {
@@ -210,9 +342,11 @@
       ;(answers || []).forEach((a, i) => {
         const target = pending[i]
         if (!target || !a || !a.answer) return
-        if (target.el.tagName === 'SELECT') {
+        if (target.radios) {
+          if (selectRadio(target.radios, a.answer)) filled++
+        } else if (target.el && target.el.tagName === 'SELECT') {
           if (selectOption(target.el, a.answer)) filled++
-        } else if (!target.el.value) {
+        } else if (target.el && !target.el.value) {
           setNativeValue(target.el, a.answer)
           filled++
         }
@@ -248,25 +382,31 @@
     fillById('first_name', f.firstName) || fillByLabel(['first name'], f.firstName)
     fillById('last_name', f.lastName) || fillByLabel(['last name'], f.lastName)
     fillById('email', f.email) || fillByLabel(['email'], f.email)
-    fillById('phone', f.phone) || fillByLabel(['phone'], f.phone)
+    // Phone: id, label, then any tel input
+    if (f.phone) {
+      const phoneEl = document.getElementById('phone') || findFieldByLabel(['phone']) || document.querySelector('input[type="tel"]')
+      if (phoneEl && (phoneEl.tagName === 'INPUT') && !phoneEl.value) setNativeValue(phoneEl, f.phone)
+    }
     fillByLabel(['linkedin'], f.linkedinUrl)
     fillByLabel(['github'], f.githubUrl)
     fillByLabel(['website', 'portfolio'], f.portfolioUrl)
-    fillByLabel(['location', 'city'], f.location)
+    // Location — prefer a "city and state" style field; f.location now carries currentLocation
+    fillByLabel(['city and state', 'current location', 'location', 'city'], f.location)
 
-    // Known EEO / demographic dropdowns from the profile
+    // Known EEO / demographic dropdowns AND radio groups from the profile
     const d = pkg.demographics || {}
     const sponsorAns = d.needsSponsorship === true ? 'yes' : d.needsSponsorship === false ? 'no' : ''
-    fillSelectByLabel(['gender'], d.gender)
-    fillSelectByLabel(['race'], d.race)
-    fillSelectByLabel(['hispanic', 'latino'], d.hispanicLatino)
-    fillSelectByLabel(['veteran'], d.veteranStatus)
-    fillSelectByLabel(['disability'], d.disabilityStatus)
-    fillSelectByLabel(['authorized', 'work authorization', 'legally authorized'], d.workAuthorization)
-    fillSelectByLabel(['sponsorship'], sponsorAns)
-    fillSelectByLabel(['bay area'], d.locatedBayArea)
+    fillChoiceByLabel(['gender'], d.gender)
+    fillChoiceByLabel(['race'], d.race)
+    fillChoiceByLabel(['hispanic', 'latino'], d.hispanicLatino)
+    fillChoiceByLabel(['veteran'], d.veteranStatus)
+    fillChoiceByLabel(['disability'], d.disabilityStatus)
+    fillChoiceByLabel(['authorized', 'work authorization', 'legally authorized'], d.workAuthorization)
+    fillChoiceByLabel(['sponsorship', 'visa', 'immigration'], sponsorAns)
+    fillChoiceByLabel(['bay area'], d.locatedBayArea)
 
     const resumeOk = attachResume(pkg.resume)
+    fillCoverLetter(pkg)
     let answersFilled = fillScreeningAnswers(pkg.screeningAnswers || [])
 
     banner('Skove filled your details — answering the remaining questions with AI…', 'info')

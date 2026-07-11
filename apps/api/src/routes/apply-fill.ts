@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm'
 import { log } from '../lib/logger.js'
 import { verifyFillToken } from '../lib/fill-token.js'
 import { answerScreeningQuestions } from '../lib/claude.js'
+import { buildCoverLetterPdf } from '../lib/document.js'
 
 export const applyFillRouter = Router()
 
@@ -64,6 +65,26 @@ applyFillRouter.get('/', async (req, res) => {
         }
       : null
 
+    // Render the cover letter to a PDF so the extension can attach it to a
+    // cover-letter file input (in addition to filling any paste-text field).
+    let coverLetterFile = null
+    if (pkg.coverLetter) {
+      try {
+        const name = [profileRow?.firstName, profileRow?.lastName].filter(Boolean).join(' ') || 'Candidate'
+        let jobTitle = 'Position', company = 'Company'
+        if (application.resultId) {
+          const [result] = await db.select().from(agentResults).where(eq(agentResults.id, application.resultId))
+          const meta = (result?.metadata ?? {}) as Record<string, any>
+          jobTitle = meta.jobTitle ?? result?.title ?? jobTitle
+          company = meta.company ?? company
+        }
+        const buf = await buildCoverLetterPdf(pkg.coverLetter, name, jobTitle, company)
+        coverLetterFile = { filename: 'cover_letter.pdf', mimeType: 'application/pdf', base64: buf.toString('base64') }
+      } catch (e) {
+        log.warn('api', 'cover letter pdf render failed', { applicationId: application.id })
+      }
+    }
+
     // Demographic / EEO + dropdown-friendly values for the extension to match
     // against <select> options and radio choices.
     const demographics = {
@@ -84,6 +105,7 @@ applyFillRouter.get('/', async (req, res) => {
       screeningAnswers: pkg.screeningAnswers ?? [],
       coverLetter: pkg.coverLetter ?? '',
       resume,
+      coverLetterFile,
     })
   } catch (err) {
     log.error('api', 'GET /api/apply-fill failed', err, { applicationId: payload.applicationId })
