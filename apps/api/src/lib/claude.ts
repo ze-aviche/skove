@@ -176,6 +176,8 @@ export async function answerScreeningQuestions(
 
 Keep answers concise and appropriate to the question type: short phrases for factual fields (salary, years, yes/no, locations), 2-4 sentences for open-ended prompts (why this company, reason for change). Write in the first person as the candidate.
 
+CRITICAL: If a question lists its allowed choices (e.g. ends with "(choose exactly one of: Yes | No)"), your answer MUST be EXACTLY one of those choices, copied verbatim, and NOTHING else — no explanation, no rephrasing. For a Yes/No question, answer literally "Yes" or "No". Use the profile's needsSponsorship (true → requires sponsorship → "Yes") and workAuthorization to decide sponsorship/visa questions.
+
 CANDIDATE PROFILE:
 ${JSON.stringify(profile)}
 

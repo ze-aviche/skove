@@ -79,23 +79,39 @@
     return !select.value || select.value === ''
   }
 
+  const norm = s => (s || '').trim().toLowerCase()
+  const wordBoundary = (hay, needle) =>
+    new RegExp(`\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(hay)
+
+  // Reduce a possibly-verbose answer to yes/no when the sentiment is clear
+  function yesNoSentiment(text) {
+    const t = norm(text)
+    if (wordBoundary(t, 'yes') || /\b(i (do|will|require|am authorized)|require|willing)\b/.test(t)) {
+      if (!/\bnot\b|\bno\b|do not|don't|doesn't/.test(t)) return 'yes'
+    }
+    if (/\b(no|not|don't|do not|decline|neither)\b/.test(t)) return 'no'
+    return null
+  }
+
   // Pick the option that best matches `desired` and select it
   function selectOption(select, desired) {
     if (!desired) return false
-    const want = String(desired).trim().toLowerCase()
+    const want = norm(desired)
     if (!want) return false
-    const opts = Array.from(select.options)
+    const opts = Array.from(select.options).filter(o => o.value !== '')
+    const yn = yesNoSentiment(want)
 
-    const norm = s => (s || '').trim().toLowerCase()
     const match =
       // exact value or visible-text match
       opts.find(o => norm(o.value) === want || norm(o.textContent) === want) ||
+      // desired contains the full option text (only if option text is meaningful)
+      opts.find(o => norm(o.textContent).length > 3 && want.includes(norm(o.textContent))) ||
       // option text contains the desired value
-      opts.find(o => want.length > 1 && norm(o.textContent).includes(want)) ||
-      // desired value contains the option text (e.g. long EEO strings)
-      opts.find(o => norm(o.textContent).length > 2 && want.includes(norm(o.textContent))) ||
-      // yes/no leading match
-      ((want === 'yes' || want === 'no') ? opts.find(o => norm(o.textContent).startsWith(want)) : null)
+      opts.find(o => want.length > 3 && norm(o.textContent).includes(want)) ||
+      // yes/no by word boundary (so "now" never matches "no")
+      opts.find(o => { const t = norm(o.textContent); return (t === 'yes' || t === 'no') && wordBoundary(want, t) }) ||
+      // fall back to yes/no sentiment of a verbose answer
+      (yn ? opts.find(o => norm(o.textContent) === yn || norm(o.textContent).startsWith(yn)) : null)
 
     if (!match) return false
     const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
@@ -141,12 +157,14 @@
 
   function selectRadio(radios, desired) {
     if (!desired || !radios.length) return false
-    const want = String(desired).trim().toLowerCase()
-    const norm = s => (s || '').trim().toLowerCase()
+    const want = norm(desired)
+    const yn = yesNoSentiment(want)
     const match =
       radios.find(r => norm(radioLabelText(r)) === want || norm(r.value) === want) ||
-      radios.find(r => want.length > 1 && norm(radioLabelText(r)).includes(want)) ||
-      ((want === 'yes' || want === 'no') ? radios.find(r => norm(radioLabelText(r)).startsWith(want)) : null)
+      radios.find(r => norm(radioLabelText(r)).length > 3 && want.includes(norm(radioLabelText(r)))) ||
+      radios.find(r => want.length > 3 && norm(radioLabelText(r)).includes(want)) ||
+      radios.find(r => { const t = norm(radioLabelText(r)); return (t === 'yes' || t === 'no') && wordBoundary(want, t) }) ||
+      (yn ? radios.find(r => norm(radioLabelText(r)) === yn || norm(radioLabelText(r)).startsWith(yn)) : null)
     if (!match) return false
     match.checked = true
     match.dispatchEvent(new Event('input', { bubbles: true }))
@@ -161,14 +179,21 @@
     })
   }
 
-  // Fill a question that is either a <select> or a radio group, by label
+  // Fill a question that is either a <select> or a radio group, by label.
+  // Searches the question label's nearby container so it still works when the
+  // control isn't linked to the label via for/nesting.
   function fillChoiceByLabel(needles, desired) {
     if (!desired) return false
     if (fillSelectByLabel(needles, desired)) return true
     const q = labelMatching(needles)
-    if (q) {
-      const radios = radioGroupForQuestion(q)
-      if (radios.length && selectRadio(radios, desired)) return true
+    if (!q) return false
+    let scope = q.closest('fieldset, div, li, section') || q.parentElement
+    for (let i = 0; i < 3 && scope; i++) {
+      const sel = scope.querySelector('select')
+      if (sel && selectIsEmpty(sel) && selectOption(sel, desired)) return true
+      const radios = Array.from(scope.querySelectorAll('input[type="radio"]'))
+      if (radios.length && !radios.some(r => r.checked) && selectRadio(radios, desired)) return true
+      scope = scope.parentElement
     }
     return false
   }
@@ -212,24 +237,39 @@
     return attachFile(input, resume, 'resume.pdf')
   }
 
+  // Locate a cover-letter file input by common Greenhouse patterns
+  function coverLetterFileInput() {
+    const resumeInput = document.getElementById('resume')
+    const byId = document.getElementById('cover_letter')
+    if (byId && byId.type === 'file') return byId
+    const labelled = fileInputByLabel(['cover letter', 'cover-letter'])
+    if (labelled && labelled !== resumeInput) return labelled
+    for (const inp of Array.from(document.querySelectorAll('input[type="file"]'))) {
+      const hay = `${inp.id} ${inp.name} ${inp.getAttribute('aria-label') || ''}`.toLowerCase()
+      if (inp !== resumeInput && /cover/.test(hay)) return inp
+    }
+    return null
+  }
+
   // Fill the cover letter: paste text into a cover-letter textarea if present,
   // and attach the rendered PDF to a cover-letter file input if present.
+  // Returns 'text' | 'file' | 'both' | '' describing what happened.
   function fillCoverLetter(pkg) {
-    let done = false
+    let text = false, file = false
     if (pkg.coverLetter) {
-      const ta = findFieldByLabel(['cover letter'])
-      if (ta && ta.tagName === 'TEXTAREA' && !ta.value) { setNativeValue(ta, pkg.coverLetter); done = true }
+      // Greenhouse "paste" option reveals a textarea; match by label or id/name
+      let ta = findFieldByLabel(['cover letter'])
+      if (!(ta && ta.tagName === 'TEXTAREA')) {
+        ta = Array.from(document.querySelectorAll('textarea')).find(t =>
+          /cover/.test(`${t.id} ${t.name} ${t.getAttribute('aria-label') || ''}`.toLowerCase()))
+      }
+      if (ta && ta.tagName === 'TEXTAREA' && !ta.value) { setNativeValue(ta, pkg.coverLetter); text = true }
     }
     if (pkg.coverLetterFile) {
-      const input =
-        document.getElementById('cover_letter') ||
-        fileInputByLabel(['cover letter'])
-      // avoid grabbing the resume input by accident
-      if (input && input !== document.getElementById('resume')) {
-        if (attachFile(input, pkg.coverLetterFile, 'cover_letter.pdf')) done = true
-      }
+      const input = coverLetterFileInput()
+      if (input) file = attachFile(input, pkg.coverLetterFile, 'cover_letter.pdf')
     }
-    return done
+    return text && file ? 'both' : text ? 'text' : file ? 'file' : ''
   }
 
   // Best-effort match of screening answers to custom-question textareas/inputs
@@ -406,15 +446,21 @@
     fillChoiceByLabel(['bay area'], d.locatedBayArea)
 
     const resumeOk = attachResume(pkg.resume)
-    fillCoverLetter(pkg)
+    const coverResult = fillCoverLetter(pkg)
     let answersFilled = fillScreeningAnswers(pkg.screeningAnswers || [])
 
     banner('Skove filled your details — answering the remaining questions with AI…', 'info')
     answersFilled += await fillArbitraryQuestions(ctx)
 
+    const coverNote = pkg.coverLetter
+      ? (coverResult === 'both' ? ' + cover letter'
+        : coverResult === 'file' ? ' + cover letter (file)'
+        : coverResult === 'text' ? ' + cover letter (pasted)'
+        : ' — cover letter field NOT found (add it manually)')
+      : ''
     banner(
-      `Skove filled your details${resumeOk ? ' + resume' : ''}${answersFilled ? ` + ${answersFilled} answer(s)` : ''}. ` +
-      `Review everything, then click Submit. Resume upload${resumeOk ? '' : ' NOT'} attached — re-check before submitting.`,
+      `Skove filled your details${resumeOk ? ' + resume' : ''}${coverNote}${answersFilled ? ` + ${answersFilled} answer(s)` : ''}. ` +
+      `Review everything, then click Submit. Resume${resumeOk ? '' : ' NOT'} attached — re-check before submitting.`,
       'success'
     )
   }
