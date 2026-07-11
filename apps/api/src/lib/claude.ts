@@ -52,15 +52,26 @@ Respond with ONLY valid JSON, no markdown:
 export interface ApplyProfile {
   firstName?: string | null
   lastName?: string | null
+  preferredFirstName?: string | null
+  preferredLastName?: string | null
+  initials?: string | null
   email?: string | null
   phone?: string | null
   city?: string | null
   country?: string | null
+  currentLocation?: string | null
   workAuthorization?: string | null
   needsSponsorship?: boolean | null
   linkedinUrl?: string | null
   githubUrl?: string | null
   portfolioUrl?: string | null
+  gender?: string | null
+  race?: string | null
+  hispanicLatino?: string | null
+  veteranStatus?: string | null
+  disabilityStatus?: string | null
+  aiUsage?: string | null
+  locatedBayArea?: string | null
 }
 
 export interface ApplyPackageResult {

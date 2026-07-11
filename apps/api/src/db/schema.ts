@@ -25,9 +25,13 @@ export const profiles = pgTable('profiles', {
   userId: text('user_id').primaryKey().references(() => users.id),
   firstName: text('first_name'),
   lastName: text('last_name'),
+  preferredFirstName: text('preferred_first_name'),
+  preferredLastName: text('preferred_last_name'),
+  initials: text('initials'),
   phone: text('phone'),
   city: text('city'),
   country: text('country'),
+  currentLocation: text('current_location'), // free-text, e.g. "San Francisco, CA"
   workAuthorization: text('work_authorization'), // e.g. 'citizen', 'visa', 'needs-sponsorship'
   needsSponsorship: boolean('needs_sponsorship'),
   linkedinUrl: text('linkedin_url'),
@@ -35,7 +39,16 @@ export const profiles = pgTable('profiles', {
   portfolioUrl: text('portfolio_url'),
   workHistory: jsonb('work_history'), // Array<{ company, title, start, end, summary }>
   education: jsonb('education'),       // Array<{ school, degree, field, start, end }>
-  eeoAnswers: jsonb('eeo_answers'),    // { gender, race, veteran, disability } — all optional
+  // EEO / demographic (all optional, self-reported)
+  gender: text('gender'),
+  race: text('race'),
+  hispanicLatino: text('hispanic_latino'),   // 'yes' | 'no' | 'decline'
+  veteranStatus: text('veteran_status'),
+  disabilityStatus: text('disability_status'),
+  // Common custom screening questions
+  aiUsage: text('ai_usage'),                 // "How are you using AI today"
+  locatedBayArea: text('located_bay_area'),  // 'yes' | 'no'
+  eeoAnswers: jsonb('eeo_answers'),    // reserved for any additional ATS-specific EEO fields
   resumeFileUrl: text('resume_file_url'), // populated once object storage lands (Phase 3)
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

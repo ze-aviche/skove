@@ -27,9 +27,13 @@ const educationItem = z.object({
 const profileSchema = z.object({
   firstName: z.string().max(120).optional().nullable(),
   lastName: z.string().max(120).optional().nullable(),
+  preferredFirstName: z.string().max(120).optional().nullable(),
+  preferredLastName: z.string().max(120).optional().nullable(),
+  initials: z.string().max(20).optional().nullable(),
   phone: z.string().max(40).optional().nullable(),
   city: z.string().max(120).optional().nullable(),
   country: z.string().max(120).optional().nullable(),
+  currentLocation: z.string().max(200).optional().nullable(),
   workAuthorization: z.string().max(60).optional().nullable(),
   needsSponsorship: z.boolean().optional().nullable(),
   linkedinUrl: z.string().max(300).optional().nullable(),
@@ -37,6 +41,13 @@ const profileSchema = z.object({
   portfolioUrl: z.string().max(300).optional().nullable(),
   workHistory: z.array(workHistoryItem).max(30).optional().nullable(),
   education: z.array(educationItem).max(20).optional().nullable(),
+  gender: z.string().max(60).optional().nullable(),
+  race: z.string().max(120).optional().nullable(),
+  hispanicLatino: z.string().max(20).optional().nullable(),
+  veteranStatus: z.string().max(120).optional().nullable(),
+  disabilityStatus: z.string().max(120).optional().nullable(),
+  aiUsage: z.string().max(2000).optional().nullable(),
+  locatedBayArea: z.string().max(20).optional().nullable(),
   eeoAnswers: z.record(z.string()).optional().nullable(),
 })
 

@@ -8,9 +8,11 @@ import { getBillingPlan, createCheckoutSession, createBillingPortalSession, User
 import { useSearchParams } from 'next/navigation'
 
 const EMPTY_PROFILE: ProfileInput = {
-  firstName: '', lastName: '', phone: '', city: '', country: '',
+  firstName: '', lastName: '', preferredFirstName: '', preferredLastName: '', initials: '',
+  phone: '', city: '', country: '', currentLocation: '',
   workAuthorization: '', needsSponsorship: false,
   linkedinUrl: '', githubUrl: '', portfolioUrl: '',
+  gender: '', race: '', hispanicLatino: '', veteranStatus: '', disabilityStatus: '', aiUsage: '', locatedBayArea: '',
 }
 
 const WORK_AUTH_OPTIONS = [
@@ -18,6 +20,45 @@ const WORK_AUTH_OPTIONS = [
   { value: 'citizen', label: 'Citizen / Permanent resident' },
   { value: 'visa', label: 'Authorized on a visa' },
   { value: 'needs-sponsorship', label: 'Need sponsorship' },
+]
+
+const GENDER_OPTIONS = [
+  { value: '', label: 'Select…' },
+  { value: 'Male', label: 'Male' },
+  { value: 'Female', label: 'Female' },
+  { value: 'Non-binary', label: 'Non-binary' },
+  { value: 'Decline to self-identify', label: 'Decline to self-identify' },
+]
+
+const RACE_OPTIONS = [
+  { value: '', label: 'Select…' },
+  { value: 'American Indian or Alaska Native', label: 'American Indian or Alaska Native' },
+  { value: 'Asian', label: 'Asian' },
+  { value: 'Black or African American', label: 'Black or African American' },
+  { value: 'Native Hawaiian or Other Pacific Islander', label: 'Native Hawaiian or Other Pacific Islander' },
+  { value: 'White', label: 'White' },
+  { value: 'Two or More Races', label: 'Two or More Races' },
+  { value: 'Decline to self-identify', label: 'Decline to self-identify' },
+]
+
+const YES_NO_DECLINE = [
+  { value: '', label: 'Select…' },
+  { value: 'yes', label: 'Yes' },
+  { value: 'no', label: 'No' },
+  { value: 'decline', label: 'Decline to self-identify' },
+]
+
+const YES_NO = [
+  { value: '', label: 'Select…' },
+  { value: 'yes', label: 'Yes' },
+  { value: 'no', label: 'No' },
+]
+
+const VETERAN_OPTIONS = [
+  { value: '', label: 'Select…' },
+  { value: 'I am not a protected veteran', label: 'I am not a protected veteran' },
+  { value: 'I identify as one or more of the classifications of protected veteran', label: 'I am a protected veteran' },
+  { value: 'Decline to self-identify', label: 'Decline to self-identify' },
 ]
 
 const inputStyle: React.CSSProperties = {
@@ -56,12 +97,13 @@ export default function ProfilePage() {
         if (billingRes) setBilling(billingRes)
         if (profileRes?.profile) {
           const p = profileRes.profile
-          setProfile({
-            firstName: p.firstName ?? '', lastName: p.lastName ?? '',
-            phone: p.phone ?? '', city: p.city ?? '', country: p.country ?? '',
-            workAuthorization: p.workAuthorization ?? '', needsSponsorship: p.needsSponsorship ?? false,
-            linkedinUrl: p.linkedinUrl ?? '', githubUrl: p.githubUrl ?? '', portfolioUrl: p.portfolioUrl ?? '',
-          })
+          const next: ProfileInput = { ...EMPTY_PROFILE }
+          for (const key of Object.keys(EMPTY_PROFILE) as (keyof ProfileInput)[]) {
+            const val = p[key as keyof typeof p]
+            if (key === 'needsSponsorship') (next as any)[key] = val ?? false
+            else (next as any)[key] = val ?? ''
+          }
+          setProfile(next)
         }
       } catch { /* non-fatal */ }
       finally { setLoading(false) }
@@ -214,6 +256,18 @@ export default function ProfilePage() {
             <input style={inputStyle} value={profile.lastName ?? ''} onChange={e => setField('lastName', e.target.value)} />
           </div>
           <div>
+            <label style={labelStyle}>Preferred first name</label>
+            <input style={inputStyle} value={profile.preferredFirstName ?? ''} onChange={e => setField('preferredFirstName', e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Preferred last name</label>
+            <input style={inputStyle} value={profile.preferredLastName ?? ''} onChange={e => setField('preferredLastName', e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Initials</label>
+            <input style={inputStyle} value={profile.initials ?? ''} onChange={e => setField('initials', e.target.value)} placeholder="e.g. A.M." />
+          </div>
+          <div>
             <label style={labelStyle}>Phone</label>
             <input style={inputStyle} value={profile.phone ?? ''} onChange={e => setField('phone', e.target.value)} placeholder="+1 555 123 4567" />
           </div>
@@ -230,6 +284,10 @@ export default function ProfilePage() {
           <div>
             <label style={labelStyle}>Country</label>
             <input style={inputStyle} value={profile.country ?? ''} onChange={e => setField('country', e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Current location</label>
+            <input style={inputStyle} value={profile.currentLocation ?? ''} onChange={e => setField('currentLocation', e.target.value)} placeholder="e.g. San Francisco, CA" />
           </div>
         </div>
 
@@ -250,6 +308,67 @@ export default function ProfilePage() {
           <div>
             <label style={labelStyle}>Portfolio / website</label>
             <input style={inputStyle} value={profile.portfolioUrl ?? ''} onChange={e => setField('portfolioUrl', e.target.value)} placeholder="https://…" />
+          </div>
+        </div>
+
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+          Demographic &amp; EEO (optional)
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 12 }}>
+          Self-reported. Used only to answer voluntary EEO questions on application forms.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
+          <div>
+            <label style={labelStyle}>Gender</label>
+            <select style={inputStyle} value={profile.gender ?? ''} onChange={e => setField('gender', e.target.value)}>
+              {GENDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Race</label>
+            <select style={inputStyle} value={profile.race ?? ''} onChange={e => setField('race', e.target.value)}>
+              {RACE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Hispanic or Latino?</label>
+            <select style={inputStyle} value={profile.hispanicLatino ?? ''} onChange={e => setField('hispanicLatino', e.target.value)}>
+              {YES_NO_DECLINE.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Veteran status</label>
+            <select style={inputStyle} value={profile.veteranStatus ?? ''} onChange={e => setField('veteranStatus', e.target.value)}>
+              {VETERAN_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Disability status</label>
+            <select style={inputStyle} value={profile.disabilityStatus ?? ''} onChange={e => setField('disabilityStatus', e.target.value)}>
+              {YES_NO_DECLINE.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>
+          Common screening questions
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginBottom: 18 }}>
+          <div>
+            <label style={labelStyle}>Are you currently located in the Bay Area?</label>
+            <select style={inputStyle} value={profile.locatedBayArea ?? ''} onChange={e => setField('locatedBayArea', e.target.value)}>
+              {YES_NO.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>How are you using AI today?</label>
+            <textarea
+              style={{ ...inputStyle, resize: 'vertical', minHeight: 68, fontFamily: 'inherit' }}
+              rows={3}
+              value={profile.aiUsage ?? ''}
+              onChange={e => setField('aiUsage', e.target.value)}
+              placeholder="A sentence or two on how you use AI in your work."
+            />
           </div>
         </div>
 

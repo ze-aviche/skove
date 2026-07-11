@@ -325,9 +325,13 @@ export type Profile = {
   userId: string
   firstName: string | null
   lastName: string | null
+  preferredFirstName: string | null
+  preferredLastName: string | null
+  initials: string | null
   phone: string | null
   city: string | null
   country: string | null
+  currentLocation: string | null
   workAuthorization: string | null
   needsSponsorship: boolean | null
   linkedinUrl: string | null
@@ -335,6 +339,13 @@ export type Profile = {
   portfolioUrl: string | null
   workHistory: WorkHistoryItem[] | null
   education: EducationItem[] | null
+  gender: string | null
+  race: string | null
+  hispanicLatino: string | null
+  veteranStatus: string | null
+  disabilityStatus: string | null
+  aiUsage: string | null
+  locatedBayArea: string | null
   eeoAnswers: Record<string, string> | null
   resumeFileUrl: string | null
   createdAt: string
