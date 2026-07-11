@@ -191,6 +191,30 @@ resultsRouter.post('/:id/apply-package', requireAuth, async (req, res) => {
   }
 })
 
+// PATCH /api/results/applications/:applicationId — persist edited screening answers
+// so the future auto-apply agent uses the user's wording as input context
+resultsRouter.patch('/applications/:applicationId', requireAuth, async (req, res) => {
+  const { screeningAnswers } = req.body as { screeningAnswers?: Array<{ question: string; answer: string }> }
+  if (!Array.isArray(screeningAnswers)) {
+    return res.status(400).json({ error: 'screeningAnswers must be an array' })
+  }
+  try {
+    const [application] = await db.select().from(applications).where(eq(applications.id, req.params.applicationId))
+    if (!application || application.userId !== req.userId) {
+      return res.status(404).json({ error: 'Application not found' })
+    }
+    const payload = { ...((application.payload ?? {}) as Record<string, any>), screeningAnswers }
+    const [updated] = await db.update(applications)
+      .set({ payload })
+      .where(eq(applications.id, application.id))
+      .returning()
+    res.json({ applicationId: updated.id, screeningAnswers })
+  } catch (err) {
+    log.error('api', 'PATCH /api/results/applications/:id failed', err, { applicationId: req.params.applicationId, userId: req.userId })
+    res.status(500).json({ error: 'Failed to save answers' })
+  }
+})
+
 // PATCH /api/results/:id/favourite — toggle favourite flag
 resultsRouter.patch('/:id/favourite', requireAuth, async (req, res) => {
   try {

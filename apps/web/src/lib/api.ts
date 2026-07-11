@@ -381,6 +381,18 @@ export function buildApplyPackage(resultId: string, token?: string): Promise<App
   })
 }
 
+export function saveScreeningAnswers(
+  applicationId: string,
+  screeningAnswers: Array<{ question: string; answer: string }>,
+  token?: string,
+): Promise<{ applicationId: string; screeningAnswers: Array<{ question: string; answer: string }> }> {
+  return fetchJson(`/api/results/applications/${applicationId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ screeningAnswers }),
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
 export async function uploadResume(file: File, token?: string): Promise<{ success: boolean; wordCount: number; pages: number }> {
   const form = new FormData()
   form.append('resume', file)

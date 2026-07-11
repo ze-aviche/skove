@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
-import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, scoreResult, toggleFavourite, toggleApplied, buildApplyPackage, ApplyPackageResponse, AgentResult } from '@/lib/api'
+import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, scoreResult, toggleFavourite, toggleApplied, buildApplyPackage, saveScreeningAnswers, ApplyPackageResponse, AgentResult } from '@/lib/api'
 
 type Tab = 'All' | 'Unread' | 'Saved' | 'Applied'
 const TABS: Tab[] = ['All', 'Unread', 'Saved', 'Applied']
@@ -580,7 +580,44 @@ export default function ResultsPage() {
 
 function ApplyReviewModal({ data, onClose }: { data: ApplyPackageResponse; onClose: () => void }) {
   const { showToast } = useToast()
-  const { fields, screeningAnswers, coverLetter } = data.package
+  const auth = useAuth()
+  const { fields, coverLetter } = data.package
+
+  const [answers, setAnswers] = useState(data.package.screeningAnswers)
+  const [editingIdx, setEditingIdx] = useState<number | null>(null)
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const updateAnswer = (idx: number, value: string) => {
+    setAnswers(prev => prev.map((a, i) => i === idx ? { ...a, answer: value } : a))
+    setDirty(true)
+  }
+
+  const copyAnswer = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      showToast({ message: 'Answer copied', variant: 'success' })
+    } catch {
+      showToast({ message: 'Copy failed', variant: 'error' })
+    }
+  }
+
+  const saveAnswers = async () => {
+    setSaving(true)
+    try {
+      const token = await auth.getToken()
+      await saveScreeningAnswers(data.applicationId, answers, token)
+      setDirty(false)
+      setEditingIdx(null)
+      showToast({ message: 'Answers saved', variant: 'success' })
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'Failed to save', variant: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const screeningAnswers = answers
 
   const fieldRows: Array<[string, string]> = [
     ['First name', fields.firstName],
@@ -649,16 +686,55 @@ function ApplyReviewModal({ data, onClose }: { data: ApplyPackageResponse; onClo
 
         {screeningAnswers.length > 0 && (
           <>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Screening answers</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Screening answers</div>
+              {dirty && (
+                <button onClick={saveAnswers} disabled={saving} style={{
+                  fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 7,
+                  border: 'none', background: '#2563eb', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer',
+                }}>{saving ? 'Saving…' : 'Save changes'}</button>
+              )}
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-              {screeningAnswers.map((a, i) => (
-                <div key={i} style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px' }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>{a.question}</div>
-                  <div style={{ fontSize: 12, color: a.answer ? 'var(--text-secondary)' : 'var(--text-tertiary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                    {a.answer || '(no answer — fill this in manually)'}
+              {screeningAnswers.map((a, i) => {
+                const isEditing = editingIdx === i
+                return (
+                  <div key={i} style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{a.question}</div>
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        <button
+                          onClick={() => setEditingIdx(isEditing ? null : i)}
+                          title={isEditing ? 'Done editing' : 'Edit answer'}
+                          style={{ fontSize: 11, padding: '2px 7px', borderRadius: 6, border: '1px solid var(--border)', background: isEditing ? 'var(--brand-dim)' : 'var(--surface-3)', color: isEditing ? 'var(--brand)' : 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >{isEditing ? '✓ Done' : '✎ Edit'}</button>
+                        <button
+                          onClick={() => copyAnswer(a.answer)}
+                          title="Copy answer"
+                          style={{ fontSize: 11, padding: '2px 7px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-3)', color: 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >⧉ Copy</button>
+                      </div>
+                    </div>
+                    {isEditing ? (
+                      <textarea
+                        value={a.answer}
+                        onChange={e => updateAnswer(i, e.target.value)}
+                        rows={Math.max(3, Math.ceil((a.answer.length || 1) / 60))}
+                        autoFocus
+                        style={{
+                          width: '100%', fontSize: 12, lineHeight: 1.6, padding: '8px 10px',
+                          borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-1)',
+                          color: 'var(--text-primary)', outline: 'none', resize: 'vertical', fontFamily: 'inherit',
+                        }}
+                      />
+                    ) : (
+                      <div style={{ fontSize: 12, color: a.answer ? 'var(--text-secondary)' : 'var(--text-tertiary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                        {a.answer || '(no answer — click Edit to fill this in)'}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </>
         )}
