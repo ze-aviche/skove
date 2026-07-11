@@ -296,20 +296,27 @@
     const seen = new Set()
     for (const label of Array.from(document.querySelectorAll('label'))) {
       const text = (label.textContent || '').replace(/\s+/g, ' ').trim()
-      // Heuristic: a real question is a longish label or ends with "?"
-      if (text.length < 8) continue
-      if (!(text.includes('?') || text.length > 25)) continue
+      if (text.length < 3) continue
 
       let el = null
       const forId = label.getAttribute('for')
       if (forId) el = document.getElementById(forId)
       if (!el) el = label.querySelector('textarea, select, input[type="text"], input:not([type])')
+      // Association fallback: a select/input immediately following the label
+      if (!el) {
+        const sib = label.nextElementSibling
+        if (sib && (sib.tagName === 'SELECT' || sib.tagName === 'TEXTAREA')) el = sib
+        else if (sib) el = sib.querySelector && sib.querySelector('select, textarea')
+      }
       if (!el) continue
       if (el.id && PERSONAL_IDS.has(el.id)) continue
 
       const isText = el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && (el.type === 'text' || el.type === ''))
       const isSelect = el.tagName === 'SELECT'
       if (!isText && !isSelect) continue
+      // Text inputs must look like a question (avoid grabbing every field);
+      // an empty <select> always qualifies even with a short label like "Gender".
+      if (isText && !(text.includes('?') || text.length > 25)) continue
       if (isText && el.value && el.value.trim()) continue
       if (isSelect && !selectIsEmpty(el)) continue
       if (seen.has(el)) continue
@@ -363,6 +370,7 @@
 
   async function fillArbitraryQuestions(ctx) {
     const pending = collectUnfilledQuestions()
+    console.info('[Skove] unfilled questions sent to AI:', pending.map(p => p.question))
     if (pending.length === 0) return 0
     try {
       // For dropdowns, tell the AI the exact allowed choices so it returns one

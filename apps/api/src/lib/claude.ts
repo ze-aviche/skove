@@ -183,6 +183,8 @@ YES/NO QUESTIONS — never leave blank. Questions that begin with "Do you", "Hav
 - Willingness/ability questions ("Are you willing to travel…", "Are you able to relocate…", "Can you start by…"): default to "Yes" unless the profile explicitly indicates otherwise.
 Reserve an empty string ONLY for open-ended factual fields you genuinely cannot derive (e.g. a specific reference's phone number) — never for a Yes/No question.
 
+VOLUNTARY EEO / DEMOGRAPHIC questions (Gender, Race, Hispanic/Latino, Veteran status, Disability status): answer using the profile's self-reported values (gender, race, hispanicLatino, veteranStatus, disabilityStatus). Pick the listed option that best matches that value — including "decline to self-identify" style options when the profile value is a decline. Do not refuse these; if the profile value is blank, choose the decline-to-answer option when one is offered, otherwise empty string.
+
 CANDIDATE PROFILE:
 ${JSON.stringify(profile)}
 
