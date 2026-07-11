@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { useToast } from '@/app/providers'
-import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, scoreResult, toggleFavourite, toggleApplied, AgentResult } from '@/lib/api'
+import { getResults, markResultRead, deleteResult, deleteResults, downloadDocument, scoreResult, toggleFavourite, toggleApplied, buildApplyPackage, ApplyPackageResponse, AgentResult } from '@/lib/api'
 
 type Tab = 'All' | 'Unread' | 'Saved' | 'Applied'
 const TABS: Tab[] = ['All', 'Unread', 'Saved', 'Applied']
@@ -50,6 +50,8 @@ export default function ResultsPage() {
   const [scoringIds, setScoringIds] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
+  const [applyingId, setApplyingId] = useState<string | null>(null)
+  const [applyModal, setApplyModal] = useState<ApplyPackageResponse | null>(null)
   const auth = useAuth()
   const { showToast } = useToast()
 
@@ -196,6 +198,19 @@ export default function ResultsPage() {
       showToast({ message: updated.isApplied ? 'Marked as applied' : 'Removed from applied', variant: 'success' })
     } catch (err) {
       showToast({ message: err instanceof Error ? err.message : 'Failed to update applied status', variant: 'error' })
+    }
+  }
+
+  const handleAiApply = async (r: AgentResult) => {
+    setApplyingId(r.id)
+    try {
+      const token = await auth.getToken()
+      const pkg = await buildApplyPackage(r.id, token)
+      setApplyModal(pkg)
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : 'AI Apply failed', variant: 'error' })
+    } finally {
+      setApplyingId(null)
     }
   }
 
@@ -425,6 +440,22 @@ export default function ResultsPage() {
                             {isScoring ? 'Scoring…' : '✦ Score match'}
                           </button>
                         )}
+                        {isJobResult && r.url && (
+                          <button
+                            onClick={() => handleAiApply(r)}
+                            disabled={applyingId === r.id}
+                            style={{
+                              fontSize: 11, fontWeight: 600,
+                              padding: '4px 10px', borderRadius: 7,
+                              border: '1px solid rgba(37,99,235,0.35)',
+                              background: 'rgba(37,99,235,0.1)',
+                              color: applyingId === r.id ? 'var(--text-tertiary)' : '#2563eb',
+                              cursor: applyingId === r.id ? 'not-allowed' : 'pointer',
+                            }}
+                          >
+                            {applyingId === r.id ? 'Preparing…' : '⚡ AI Apply'}
+                          </button>
+                        )}
                         {hasCover && (
                           <button
                             onClick={() => setExpandedCoverLetter(expandedCoverLetter === r.id ? null : r.id)}
@@ -536,6 +567,125 @@ export default function ResultsPage() {
           )}
         </>
       )}
+
+      {applyModal && (
+        <ApplyReviewModal
+          data={applyModal}
+          onClose={() => setApplyModal(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function ApplyReviewModal({ data, onClose }: { data: ApplyPackageResponse; onClose: () => void }) {
+  const { showToast } = useToast()
+  const { fields, screeningAnswers, coverLetter } = data.package
+
+  const fieldRows: Array<[string, string]> = [
+    ['First name', fields.firstName],
+    ['Last name', fields.lastName],
+    ['Email', fields.email],
+    ['Phone', fields.phone],
+    ['Location', fields.location],
+    ['LinkedIn', fields.linkedinUrl],
+    ['GitHub', fields.githubUrl],
+    ['Portfolio', fields.portfolioUrl],
+    ['Work authorization', fields.workAuthorization],
+    ['Needs sponsorship', fields.needsSponsorship ? 'Yes' : 'No'],
+  ]
+
+  const copyAll = async () => {
+    const lines = [
+      ...fieldRows.map(([k, v]) => `${k}: ${v}`),
+      '',
+      ...screeningAnswers.map(a => `Q: ${a.question}\nA: ${a.answer}`),
+      '',
+      'Cover letter:',
+      coverLetter,
+    ]
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'))
+      showToast({ message: 'Copied to clipboard', variant: 'success' })
+    } catch {
+      showToast({ message: 'Copy failed', variant: 'error' })
+    }
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000, padding: 20,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--surface-1)', border: '1px solid var(--border)',
+          borderRadius: 16, padding: 24, maxWidth: 620, width: '100%',
+          maxHeight: '85vh', overflowY: 'auto',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+          <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)' }}>⚡ AI Apply — review</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, color: 'var(--text-tertiary)', cursor: 'pointer' }}>✕</button>
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 18 }}>
+          Detected ATS: <b style={{ color: 'var(--text-primary)' }}>{data.atsType}</b>. Review the drafted answers, then open the application form. Nothing is submitted automatically yet — you stay in control of the final submit.
+        </p>
+
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Your details</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: '6px 12px', marginBottom: 20, fontSize: 12 }}>
+          {fieldRows.map(([k, v]) => (
+            <Fragment key={k}>
+              <div style={{ color: 'var(--text-tertiary)' }}>{k}</div>
+              <div style={{ color: v ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{v || '—'}</div>
+            </Fragment>
+          ))}
+        </div>
+
+        {screeningAnswers.length > 0 && (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Screening answers</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+              {screeningAnswers.map((a, i) => (
+                <div key={i} style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>{a.question}</div>
+                  <div style={{ fontSize: 12, color: a.answer ? 'var(--text-secondary)' : 'var(--text-tertiary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                    {a.answer || '(no answer — fill this in manually)'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {coverLetter && (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Cover letter</div>
+            <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7, whiteSpace: 'pre-wrap', marginBottom: 20 }}>
+              {coverLetter}
+            </div>
+          </>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={copyAll} style={{
+            fontSize: 13, fontWeight: 500, padding: '9px 16px', borderRadius: 9,
+            border: '1px solid var(--border)', background: 'var(--surface-3)',
+            color: 'var(--text-secondary)', cursor: 'pointer',
+          }}>Copy all</button>
+          {data.applyUrl && (
+            <a href={data.applyUrl} target="_blank" rel="noreferrer" style={{
+              fontSize: 13, fontWeight: 600, padding: '9px 18px', borderRadius: 9,
+              border: 'none', background: '#2563eb', color: '#fff', textDecoration: 'none',
+            }}>Open application form →</a>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

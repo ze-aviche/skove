@@ -355,6 +355,32 @@ export function saveProfile(input: ProfileInput, token?: string): Promise<{ prof
   })
 }
 
+// ── AI Apply ─────────────────────────────────────────────────────────────────
+
+export type ApplyPackage = {
+  fields: {
+    firstName: string; lastName: string; email: string; phone: string; location: string
+    linkedinUrl: string; githubUrl: string; portfolioUrl: string
+    workAuthorization: string; needsSponsorship: boolean
+  }
+  screeningAnswers: Array<{ question: string; answer: string }>
+  coverLetter: string
+}
+
+export type ApplyPackageResponse = {
+  applicationId: string
+  atsType: 'greenhouse' | 'lever' | 'ashby' | 'workday' | 'unknown'
+  applyUrl: string | null
+  package: ApplyPackage
+}
+
+export function buildApplyPackage(resultId: string, token?: string): Promise<ApplyPackageResponse> {
+  return fetchJson(`/api/results/${resultId}/apply-package`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+}
+
 export async function uploadResume(file: File, token?: string): Promise<{ success: boolean; wordCount: number; pages: number }> {
   const form = new FormData()
   form.append('resume', file)

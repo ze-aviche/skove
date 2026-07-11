@@ -49,6 +49,99 @@ Respond with ONLY valid JSON, no markdown:
   return JSON.parse(jsonMatch[0]) as JobMatchResult
 }
 
+export interface ApplyProfile {
+  firstName?: string | null
+  lastName?: string | null
+  email?: string | null
+  phone?: string | null
+  city?: string | null
+  country?: string | null
+  workAuthorization?: string | null
+  needsSponsorship?: boolean | null
+  linkedinUrl?: string | null
+  githubUrl?: string | null
+  portfolioUrl?: string | null
+}
+
+export interface ApplyPackageResult {
+  fields: {
+    firstName: string
+    lastName: string
+    email: string
+    phone: string
+    location: string
+    linkedinUrl: string
+    githubUrl: string
+    portfolioUrl: string
+    workAuthorization: string
+    needsSponsorship: boolean
+  }
+  screeningAnswers: Array<{ question: string; answer: string }>
+  coverLetter: string
+}
+
+// Assemble a review-ready application package from the applicant profile + resume + job.
+// The profile is the source of truth for identity fields; the LLM only drafts the
+// cover letter and answers to common screening questions — it must not invent facts.
+export async function buildApplyPackage(
+  profile: ApplyProfile,
+  resumeText: string,
+  job: { title: string; company: string; location: string; description?: string; salary?: string }
+): Promise<ApplyPackageResult> {
+  const message = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 2048,
+    messages: [{
+      role: 'user',
+      content: `You are a job application assistant. Draft answers to the standard screening questions an ATS asks, and a cover letter, for this candidate applying to this role. Base every answer strictly on the profile and resume — never invent employers, dates, credentials, or personal details.
+
+CANDIDATE PROFILE (authoritative for personal facts):
+${JSON.stringify(profile)}
+
+RESUME (truncated):
+${resumeText.slice(0, 3000)}
+
+JOB LISTING:
+Title: ${job.title}
+Company: ${job.company}
+Location: ${job.location}
+${job.salary ? `Salary: ${job.salary}` : ''}
+${job.description ? `Description: ${job.description.slice(0, 1200)}` : ''}
+
+Produce 3-6 screening answers for questions this specific job likely asks (e.g. "Why do you want to work here?", "Years of experience with X", "Are you authorized to work in this country?", "Do you require sponsorship?", "Notice period"). Use the profile's work authorization and sponsorship fields for those questions. If a factual answer is unknown, use an empty string rather than guessing.
+
+Respond with ONLY valid JSON, no markdown:
+{
+  "screeningAnswers": [ { "question": "<question>", "answer": "<answer, or empty string if unknown>" } ],
+  "coverLetter": "<professional 3-paragraph cover letter tailored to this role and company>"
+}`,
+    }],
+  })
+
+  const text = message.content[0].type === 'text' ? message.content[0].text : ''
+  const jsonMatch = text.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) throw new Error('Claude returned invalid response')
+  const parsed = JSON.parse(jsonMatch[0]) as { screeningAnswers?: Array<{ question: string; answer: string }>; coverLetter?: string }
+
+  const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ')
+  return {
+    fields: {
+      firstName: profile.firstName ?? '',
+      lastName: profile.lastName ?? '',
+      email: profile.email ?? '',
+      phone: profile.phone ?? '',
+      location: [profile.city, profile.country].filter(Boolean).join(', '),
+      linkedinUrl: profile.linkedinUrl ?? '',
+      githubUrl: profile.githubUrl ?? '',
+      portfolioUrl: profile.portfolioUrl ?? '',
+      workAuthorization: profile.workAuthorization ?? '',
+      needsSponsorship: Boolean(profile.needsSponsorship),
+    },
+    screeningAnswers: Array.isArray(parsed.screeningAnswers) ? parsed.screeningAnswers : [],
+    coverLetter: parsed.coverLetter ?? '',
+  }
+}
+
 export async function tailorResume(
   resumeText: string,
   job: { title: string; company: string; location: string; description?: string; salary?: string }

@@ -1,10 +1,20 @@
 import { Router } from 'express'
+import { clerkClient } from '@clerk/clerk-sdk-node'
 import { db } from '../db/index.js'
-import { agentResults, users } from '../db/schema.js'
+import { agentResults, users, profiles, applications } from '../db/schema.js'
 import { eq, desc, and, inArray } from 'drizzle-orm'
 import { requireAuth } from '../lib/auth.js'
 import { log } from '../lib/logger.js'
-import { scoreJobMatch, tailorResume } from '../lib/claude.js'
+import { scoreJobMatch, tailorResume, buildApplyPackage } from '../lib/claude.js'
+
+function inferAtsType(url?: string | null): string {
+  const u = (url ?? '').toLowerCase()
+  if (u.includes('greenhouse.io')) return 'greenhouse'
+  if (u.includes('lever.co')) return 'lever'
+  if (u.includes('ashbyhq.com')) return 'ashby'
+  if (u.includes('myworkdayjobs.com') || u.includes('workday')) return 'workday'
+  return 'unknown'
+}
 
 export const resultsRouter = Router()
 
@@ -113,6 +123,71 @@ resultsRouter.post('/:id/score', requireAuth, async (req, res) => {
   } catch (err) {
     log.error('api', 'POST /api/results/:id/score failed', err, { resultId: req.params.id, userId: req.userId })
     res.status(500).json({ error: 'Scoring failed' })
+  }
+})
+
+// POST /api/results/:id/apply-package — assemble a review-ready AI Apply package
+resultsRouter.post('/:id/apply-package', requireAuth, async (req, res) => {
+  try {
+    const [result] = await db.select().from(agentResults).where(eq(agentResults.id, req.params.id))
+    if (!result || result.userId !== req.userId) {
+      return res.status(404).json({ error: 'Result not found' })
+    }
+
+    const [userRow] = await db.select({ resumeText: users.resumeText, email: users.email }).from(users).where(eq(users.id, req.userId!))
+    if (!userRow?.resumeText) {
+      return res.status(400).json({ error: 'No resume uploaded — upload a resume before using AI Apply' })
+    }
+
+    const [profileRow] = await db.select().from(profiles).where(eq(profiles.userId, req.userId!))
+
+    // Fall back to Clerk identity for name/email when the profile leaves them blank
+    let clerkFirst = '', clerkLast = '', clerkEmail = ''
+    try {
+      const clerkUser = await clerkClient.users.getUser(req.userId!)
+      clerkFirst = clerkUser.firstName ?? ''
+      clerkLast = clerkUser.lastName ?? ''
+      const primary = clerkUser.emailAddresses?.find(e => e.id === clerkUser.primaryEmailAddressId)
+      clerkEmail = primary?.emailAddress ?? clerkUser.emailAddresses?.[0]?.emailAddress ?? ''
+    } catch { /* non-fatal */ }
+
+    const meta = (result.metadata ?? {}) as Record<string, any>
+    const jobData = {
+      title: meta.jobTitle ?? result.title,
+      company: meta.company ?? '',
+      location: meta.location ?? '',
+      description: meta.description,
+      salary: meta.salary,
+    }
+
+    const pkg = await buildApplyPackage(
+      {
+        firstName: profileRow?.firstName || clerkFirst,
+        lastName: profileRow?.lastName || clerkLast,
+        email: userRow.email && userRow.email.includes('@') ? userRow.email : clerkEmail,
+        phone: profileRow?.phone,
+        city: profileRow?.city,
+        country: profileRow?.country,
+        workAuthorization: profileRow?.workAuthorization,
+        needsSponsorship: profileRow?.needsSponsorship,
+        linkedinUrl: profileRow?.linkedinUrl,
+        githubUrl: profileRow?.githubUrl,
+        portfolioUrl: profileRow?.portfolioUrl,
+      },
+      userRow.resumeText,
+      jobData,
+    )
+
+    const atsType = inferAtsType(result.url)
+    const [application] = await db.insert(applications)
+      .values({ userId: req.userId!, resultId: result.id, atsType, status: 'draft', payload: pkg })
+      .returning()
+
+    log.info('api', 'apply package built', { resultId: result.id, atsType, applicationId: application.id, userId: req.userId })
+    res.json({ applicationId: application.id, atsType, applyUrl: result.url, package: pkg })
+  } catch (err) {
+    log.error('api', 'POST /api/results/:id/apply-package failed', err, { resultId: req.params.id, userId: req.userId })
+    res.status(500).json({ error: 'Failed to build application package' })
   }
 })
 
